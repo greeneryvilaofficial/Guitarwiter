@@ -18,7 +18,7 @@ service_block = """    <service
             android:name="android.view.im"
             android:resource="@xml/method" />
         <intent-filter>
-            <action android:name="view.InputMethod" />
+            <action android:name="android.view.InputMethod" />
         </intent-filter>
     </service>
 </application>"""
