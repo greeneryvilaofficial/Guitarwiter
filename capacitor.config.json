@@ -1,0 +1,9 @@
+{
+  "appId": "com.keyboardkustom.app",
+  "appName": "Genjreng Ketik",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  }
+}

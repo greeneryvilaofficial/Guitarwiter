@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Genjreng Ketik — Nada Gitar Jadi Ketikan Otomatis</title>
+<meta name="description" content="Petik nada di gitar aslimu — mikrofon mendeteksinya secara real-time dan huruf yang sesuai otomatis terketik. Keyboard virtual bergaya Google Keyboard lengkap dengan Shift, mode simbol, emoji, dan mode mengambang.">
+
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#1A73E8">
+
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Genjreng">
+<meta name="mobile-web-app-capable" content="yes">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="Genjreng Ketik — Nada Gitar Jadi Ketikan Otomatis">
+<meta property="og:description" content="Petik nada di gitar aslimu, dan huruf yang sesuai otomatis terketik lewat keyboard virtual bergaya Google Keyboard.">
+<meta property="og:image" content="icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Genjreng Ketik">
+<meta name="twitter:description" content="Nada gitar jadi ketikan otomatis, langsung di browser.">
+<meta name="twitter:image" content="icon-512.png">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+
+  :root{
+    --app-bg:#F1F3F4;
+    --frame:#1F2023;
+    --screen:#FFFFFF;
+    --field-bg:#FFFFFF;
+    --field-border:#DADCE0;
+    --kb-bg:#202124;
+    --key-bg:#35363A;
+    --key-fn-bg:#28292C;
+    --key-text:#E8EAED;
+    --key-tag:#7CE7C4;
+    --shadow:rgba(0,0,0,.45);
+    --accent:#1A73E8;
+    --accent-dim:#E8F0FE;
+    --danger:#D93025;
+    --muted:#5F6368;
+    --key-shift-on-bg:#284666;
+    --key-capslock-bg:#1A73E8;
+    --key-active-bg:#2E5D4D;
+    --key-fn-active-bg:#3A4A57;
+    --key-bubble-bg:#101114;
+    --key-bubble-text:#FFFFFF;
+    --key-enter-bg:#1CC9A5;
+  }
+  *{box-sizing:border-box;}
+  html,body{ height:100%; }
+  body{
+    margin:0;
+    min-height:100dvh;
+    background:var(--kb-bg);
+    font-family:'Roboto', sans-serif;
+    display:flex;
+    justify-content:center;
+    color:var(--key-text);
+    overflow-x:hidden;
+  }
+
+  .app-shell{
+    width:100%;
+    max-width:480px;
+    background:var(--screen);
+    color:#1F1F1F;
+    min-height:100dvh;
+    padding:16px 14px 12px;
+    display:flex;
+    flex-direction:column;
+  }
+
+  h1{ font-size:1rem; font-weight:700; margin:0 0 2px; }
+  .sub{ font-size:.72rem; color:var(--muted); margin:0 0 12px; line-height:1.4; }
+
+  .mic-row{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .mic-btn{
+    display:flex; align-items:center; gap:6px;
+    border:none; background:var(--accent-dim); color:var(--accent);
+    font-weight:700; font-size:.78rem; padding:9px 14px; border-radius:20px; cursor:pointer;
+  }
+  .mic-btn.on{ background:var(--danger); color:#fff; }
+  .level-wrap{ flex:1; height:8px; background:#E8EAED; border-radius:4px; overflow:hidden; }
+  .level-bar{ height:100%; width:0%; background:var(--accent); transition:width .06s linear; }
+  .clear-btn{
+    border:none; background:none; color:var(--danger);
+    font-size:.7rem; font-weight:700; cursor:pointer; padding:6px 4px;
+  }
+
+  .mic-status{ font-size:.7rem; color:var(--muted); min-height:16px; margin:0 0 10px; }
+  .mic-status b{ color:var(--key-tag); }
+
+  .textfield{
+    background:var(--field-bg); border:1.5px solid var(--field-border);
+    border-radius:10px; padding:12px 12px; min-height:64px;
+    font-size:1rem; line-height:1.6; color:#1F1F1F;
+    white-space:pre-wrap; word-break:break-word;
+    flex:1; overflow-y:auto; cursor:text; -webkit-user-select:text; user-select:text;
+  }
+  .textfield .placeholder{ color:#9AA0A6; }
+  .textfield .chr{ white-space:pre; }
+  .textfield .cursor{
+    display:inline-block; width:2px; height:1.1em; background:var(--accent);
+    vertical-align:text-bottom; animation:blink 1s step-end infinite;
+  }
+  @keyframes blink{ 50%{ opacity:0; } }
+
+  .kb-float-wrap{
+    position:fixed;
+    z-index:50;
+  }
+  .kb-float-wrap.docked{
+    left:50%; bottom:0; transform:translateX(-50%);
+    width:100%; max-width:480px;
+    padding-bottom:env(safe-area-inset-bottom, 0px);
+    background:var(--kb-bg);
+  }
+  .kb-float-wrap.floating{
+    width:300px;
+    border-radius:16px;
+    box-shadow:0 22px 50px rgba(0,0,0,.4);
+    overflow:hidden;
+  }
+  .kb-float-wrap.floating .keyboard{ margin-top:0; border-radius:0 0 16px 16px; }
+  .kb-handle{
+    display:none;
+    align-items:center; justify-content:center;
+    background:#2B2C30; height:20px; cursor:grab; touch-action:none;
+  }
+  .kb-float-wrap.floating .kb-handle{ display:flex; }
+  .kb-handle .dots{ width:36px; height:4px; border-radius:2px; background:#8A8F95; }
+  .kb-handle:active{ cursor:grabbing; }
+
+  .float-toggle{
+    border:none; background:none; color:var(--accent);
+    font-size:.7rem; font-weight:700; cursor:pointer; padding:6px 4px;
+  }
+
+  .gboard-toolbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:8px 10px 2px; gap:4px;
+  }
+  .gtool-btn{
+    border:none; background:none; color:#9AA0A6; font-size:1.05rem;
+    width:34px; height:34px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; -webkit-tap-highlight-color:transparent; flex:0 0 auto;
+  }
+  .gtool-btn:active{ background:rgba(255,255,255,.08); }
+  .gtool-btn.mic-tool{ color:#8AB4F8; }
+  .gtool-btn.mic-tool.on{ color:#F28B82; }
+  .gtool-spacer{ flex:1; }
+
+  .keyboard{ background:var(--kb-bg); border-radius:14px 14px 0 0; margin-top:0; padding:4px 4px 6px; }
+  .krow{ display:flex; gap:5px; justify-content:center; margin-bottom:5px; }
+  .krow:last-child{ margin-bottom:0; }
+
+  .key{
+    position:relative; flex:1; background:var(--key-bg); border:none; border-radius:6px;
+    padding:9px 0 6px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    box-shadow:0 1.5px 0 var(--shadow); font-family:'Roboto', sans-serif;
+    cursor:pointer; user-select:none; -webkit-tap-highlight-color:transparent;
+  }
+  .key .ch{ font-size:1rem; font-weight:400; color:var(--key-text); line-height:1; }
+  .key .tag{ font-size:.48rem; font-weight:700; color:var(--key-tag); margin-top:2px; }
+  .key.fn{ background:var(--key-fn-bg); flex:1.3; }
+  .key.fn .ch{ font-size:.85rem; color:#C6C9CD; }
+  .key.fn.key-shift{ flex:1.9; }
+  .key.fn.key-shift .ch{ font-size:1.05rem; }
+  .key.space{ flex:7; padding-top:12px; padding-bottom:9px; }
+  .key.space .ch{ font-size:.66rem; color:#C6C9CD; font-weight:500; letter-spacing:.04em; }
+  .key.is-active{ background:var(--key-active-bg); }
+  .key.fn.is-active{ background:var(--key-fn-active-bg); }
+  .key.shift-on{ background:var(--key-shift-on-bg); }
+  .key.caps-lock{ background:var(--key-capslock-bg); }
+  .key.caps-lock .ch{ color:#fff; }
+  .key.fn.key-enter{ background:var(--key-enter-bg); flex:1.6; }
+  .key.fn.key-enter .ch{ color:#062B22; font-size:1.05rem; }
+  .key.fn.key-enter .tag{ color:#0B3B30; }
+  .key.fn.key-enter.is-active{ background:#17AE8D; }
+
+  .emoji-panel{
+    display:none;
+    grid-template-columns:repeat(6,1fr);
+    gap:5px;
+    background:var(--kb-bg);
+    border-radius:14px;
+    margin-top:12px;
+    padding:10px 6px;
+    max-height:230px;
+    overflow-y:auto;
+  }
+  .emoji-btn{
+    position:relative; border:none; background:var(--key-bg); border-radius:8px;
+    padding:7px 0 5px; cursor:pointer; box-shadow:0 1.5px 0 var(--shadow);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px;
+    user-select:none; -webkit-tap-highlight-color:transparent;
+  }
+  .emoji-btn .ch{ font-size:1.1rem; line-height:1; }
+  .emoji-btn .tag{ font-size:.42rem; font-weight:700; color:var(--key-tag); }
+  .emoji-btn.is-active{ background:var(--key-active-bg); }
+
+  .key .bubble, .emoji-btn .bubble{
+    position:absolute; bottom:100%; left:50%;
+    transform:translateX(-50%) translateY(6px) scale(.85);
+    background:var(--key-bubble-bg); color:var(--key-bubble-text); font-weight:700; font-size:1.1rem;
+    padding:8px 12px; border-radius:8px; box-shadow:0 6px 16px rgba(0,0,0,.4);
+    opacity:0; pointer-events:none; white-space:nowrap;
+    transition:opacity .1s ease, transform .1s ease; z-index:5;
+  }
+  .key .bubble.show, .emoji-btn .bubble.show{ opacity:1; transform:translateX(-50%) translateY(-4px) scale(1); }
+
+  .legend{ margin-top:14px; padding-top:10px; border-top:1px solid #EEE; }
+  .legend summary{ font-size:.75rem; color:var(--accent); cursor:pointer; font-weight:700; }
+  .legend-grid{ display:grid; grid-template-columns:repeat(6,1fr); gap:6px 4px; margin-top:8px; }
+  .legend-item{ text-align:center; font-size:.6rem; color:var(--muted); background:#F8F9FA; border-radius:6px; padding:4px 2px; }
+  .legend-item b{ display:block; font-size:.72rem; color:var(--key-text); }
+
+  footer{ text-align:center; font-size:.62rem; color:#9AA0A6; margin-top:12px; line-height:1.5; }
+</style>
+</head>
+<body>
+<div class="app-shell" id="appShell">
+  <h1>Genjreng Ketik</h1>
+  <p class="sub">Petik satu nada/fret di gitar aslimu — mikrofon mengenali nadanya, dan tuts yang cocok otomatis "ditekan". Semua tuts punya nada sendiri: huruf, angka, spasi, Shift, Backspace (hapus), Enter (kirim), sampai tombol ganti mode.</p>
+
+  <div class="mic-row">
+    <button class="mic-btn" id="micBtn">🎤 Dengarkan Gitar</button>
+    <div class="level-wrap"><div class="level-bar" id="levelBar"></div></div>
+    <button class="clear-btn" id="clearBtn">Hapus</button>
+    <button class="float-toggle" id="floatBtn">🔀 Mengambang</button>
+  </div>
+  <div class="mic-status" id="micStatus">Petik nada satu-satu (bukan kunci penuh) untuk hasil terbaik. Spasi, Shift, Hapus, dan Kirim juga punya nada masing-masing.</div>
+
+  <div class="textfield" id="textfield" tabindex="0"></div>
+
+  <details class="legend">
+    <summary>Lihat pemetaan tuts → nada</summary>
+    <div class="legend-grid" id="legendGrid"></div>
+  </details>
+
+  <footer>
+    Deteksi nada memakai autokorelasi dari mikrofon — paling akurat untuk satu senar dipetik jelas. Jangkauan nada kini E2–B5, mencakup semua tuts termasuk spasi, Shift, Backspace, dan Enter.
+  </footer>
+</div>
+
+<div class="kb-float-wrap docked" id="kbWrap">
+  <div class="kb-handle" id="kbHandle"><span class="dots"></span></div>
+  <div class="gboard-toolbar" id="gboardToolbar">
+    <button class="gtool-btn" type="button" title="Aplikasi">⊞</button>
+    <button class="gtool-btn" type="button" title="Stiker">🗨</button>
+    <button class="gtool-btn" type="button" title="GIF">GIF</button>
+    <div class="gtool-spacer"></div>
+    <button class="gtool-btn" type="button" title="Setelan">⚙</button>
+    <button class="gtool-btn" type="button" title="Terjemahan">あA</button>
+    <button class="gtool-btn mic-tool" id="micToolBtn" type="button" title="Dengarkan gitar">🎤</button>
+  </div>
+  <div class="keyboard" id="keyboard"></div>
+  <div class="emoji-panel" id="emojiPanel"></div>
+</div>
+
+<script>
+(function(){
+  // ---------------- Note table: E2 (open low E) upward. Setiap tuts — termasuk spasi, Shift,
+  // Backspace, Enter, dan tombol ganti mode — mendapat satu nada sendiri, berurutan dari nada
+  // terendah (pojok kiri atas) ke nada tertinggi (pojok kanan bawah), mengikuti urutan visual keyboard. ----------------
+  const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  const BASE_MIDI = 40; // E2
+
+  // Urutan visual keyboard (persis urutan render): baris angka, baris q-p, baris a-l,
+  // [Shift] + baris z-m + [Backspace], lalu baris bawah [emoji][?123][,][spasi][.][Enter]
+  const KEY_DEFS = [
+    ...['1','2','3','4','5','6','7','8','9','0'].map(ch=>({type:'letter', char:ch})),
+    ...['q','w','e','r','t','y','u','i','o','p'].map(ch=>({type:'letter', char:ch})),
+    ...['a','s','d','f','g','h','j','k','l'].map(ch=>({type:'letter', char:ch})),
+    {type:'shift'},
+    ...['z','x','c','v','b','n','m'].map(ch=>({type:'letter', char:ch})),
+    {type:'backspace'},
+    {type:'emoji-toggle'},
+    {type:'num-toggle'},
+    {type:'literal', char:',', label:','},
+    {type:'literal', char:' ', label:'spasi', big:true},
+    {type:'literal', char:'.', label:'.'},
+    {type:'enter'},
+  ];
+  const NOTE_COUNT = KEY_DEFS.length; // 44
+
+  // Rentang index (di KEY_DEFS / NOTES) tuts huruf yang boleh diganti jadi simbol / huruf besar
+  const LETTER_INDICES = [
+    ...Array.from({length:10},(_,i)=>10+i), // baris q-p
+    ...Array.from({length:9},(_,i)=>20+i),  // baris a-l
+    ...Array.from({length:7},(_,i)=>30+i),  // baris z-m
+  ];
+
+  // Standard guitar tuning (open string MIDI numbers), string 6 = low E to string 1 = high e
+  const TUNING = [
+    {string:6, open:'E', midi:40},
+    {string:5, open:'A', midi:45},
+    {string:4, open:'D', midi:50},
+    {string:3, open:'G', midi:55},
+    {string:2, open:'B', midi:59},
+    {string:1, open:'e', midi:64},
+  ];
+  const MAX_FRET = 20;
+  function findFret(midi){
+    let best = null;
+    TUNING.forEach(t=>{
+      const fret = midi - t.midi;
+      if(fret>=0 && fret<=MAX_FRET){
+        if(!best || fret<best.fret) best = {string:t.string, open:t.open, fret};
+      }
+    });
+    return best;
+  }
+
+  const NOTES = [];
+  for(let i=0;i<NOTE_COUNT;i++){
+    const midi = BASE_MIDI + i;
+    const freq = 440 * Math.pow(2, (midi-69)/12);
+    const name = NOTE_NAMES[((midi%12)+12)%12] + (Math.floor(midi/12)-1);
+    const pos = findFret(midi);
+    NOTES.push({
+      idx: i, midi, freq, name,
+      string: pos ? pos.string : null,
+      fret: pos ? pos.fret : null
+    });
+  }
+
+  // ---------------- Keyboard layout: SEMUA tuts (44) responsif nada ----------------
+  const keyboardEl = document.getElementById('keyboard');
+  const legendGrid = document.getElementById('legendGrid');
+  const keyMap = {};      // char fisik -> element (huruf/angka/koma/spasi/titik)
+  const allKeys = [];     // index 0..43 -> element, sejajar dengan NOTES
+
+  function legendLabelFor(def){
+    if(def.type==='letter') return def.char;
+    if(def.type==='literal') return def.big ? 'spasi' : def.char;
+    if(def.type==='shift') return '⇧';
+    if(def.type==='backspace') return '⌫';
+    if(def.type==='enter') return '↵';
+    if(def.type==='emoji-toggle') return '😊';
+    if(def.type==='num-toggle') return '?123';
+    return '?';
+  }
+
+  function makeKeyEl(def, note){
+    const btn = document.createElement('button');
+    btn.dataset.freq = note.freq;
+    btn.dataset.note = note.name;
+    btn.dataset.string = note.string;
+    btn.dataset.fret = note.fret;
+    btn.title = note.name;
+
+    if(def.type==='letter'){
+      btn.className='key';
+      btn.dataset.type='note';
+      btn.dataset.origChar = def.char;
+      btn.innerHTML = '<span class="ch">'+def.char+'</span><span class="tag">'+note.name+'</span><span class="bubble"></span>';
+      btn.addEventListener('pointerdown', ()=> manualPress(btn));
+      keyMap[def.char] = btn;
+    } else if(def.type==='shift'){
+      btn.className='key fn key-shift';
+      btn.id='shiftBtn';
+      btn.innerHTML='<span class="ch">⇧</span><span class="tag">'+note.name+'</span><span class="bubble"></span>';
+      btn.addEventListener('pointerdown', ()=> shiftToggle(btn));
+    } else if(def.type==='backspace'){
+      btn.className='key fn';
+      btn.dataset.type='backspace';
+      btn.innerHTML='<span class="ch">⌫</span><span class="tag">'+note.name+'</span><span class="bubble"></span>';
+      btn.addEventListener('pointerdown', ()=> functionalPress(btn));
+    } else if(def.type==='emoji-toggle'){
+      btn.className='key fn'; btn.id='emojiBtn';
+      btn.innerHTML='<span class="ch">😊</span><span class="tag">'+note.name+'</span><span class="bubble"></span>';
+      btn.addEventListener('pointerdown', ()=>{ flash(btn); setMode(mode==='emoji' ? 'letters' : 'emoji'); });
+    } else if(def.type==='num-toggle'){
+      btn.className='key fn'; btn.id='numBtn';
+      btn.innerHTML='<span class="ch">?123</span><span class="tag">'+note.name+'</span><span class="bubble"></span>';
+      btn.addEventListener('pointerdown', ()=>{ flash(btn); setMode(mode==='symbols' ? 'letters' : 'symbols'); });
+    } else if(def.type==='literal'){
+      btn.className = def.big ? 'key space' : 'key';
+      btn.dataset.type='literal';
+      btn.dataset.char = def.char;
+      btn.innerHTML = '<span class="ch">'+(def.label||def.char)+'</span><span class="tag">'+note.name+'</span><span class="bubble"></span>';
+      btn.addEventListener('pointerdown', ()=> functionalPress(btn));
+      keyMap[def.char] = btn;
+    } else if(def.type==='enter'){
+      btn.className='key fn key-enter';
+      btn.dataset.type='enter';
+      btn.innerHTML='<span class="ch">↵</span><span class="tag">'+note.name+'</span><span class="bubble"></span>';
+      btn.addEventListener('pointerdown', ()=> functionalPress(btn));
+    }
+    return btn;
+  }
+
+  function buildRow(defs, notes){
+    const row = document.createElement('div');
+    row.className = 'krow';
+    defs.forEach((def, i)=>{
+      const note = notes[i];
+      const el = makeKeyEl(def, note);
+      row.appendChild(el);
+      allKeys[note.idx] = el;
+
+      const li = document.createElement('div');
+      li.className = 'legend-item';
+      li.innerHTML = '<b>'+legendLabelFor(def)+'</b>'+note.name;
+      legendGrid.appendChild(li);
+    });
+    keyboardEl.appendChild(row);
+  }
+
+  buildRow(KEY_DEFS.slice(0,10),  NOTES.slice(0,10));   // angka
+  buildRow(KEY_DEFS.slice(10,20), NOTES.slice(10,20));  // q-p
+  buildRow(KEY_DEFS.slice(20,29), NOTES.slice(20,29));  // a-l
+  buildRow(KEY_DEFS.slice(29,38), NOTES.slice(29,38));  // Shift + z-m + Backspace
+  buildRow(KEY_DEFS.slice(38,44), NOTES.slice(38,44));  // emoji, ?123, , spasi . Enter
+
+  // ---------------- Text field: bisa diketuk untuk pindah kursor, insert/hapus di posisi kursor ----------------
+  const textfieldEl = document.getElementById('textfield');
+  let text = '';
+  let cursorPos = 0;
+
+  function makeCursorEl(){
+    const c = document.createElement('span');
+    c.className = 'cursor';
+    return c;
+  }
+  function renderText(){
+    textfieldEl.innerHTML = '';
+    if(text.length===0){
+      const ph = document.createElement('span');
+      ph.className = 'placeholder';
+      ph.textContent = 'Hasil ketikan dari gitar akan muncul di sini…';
+      textfieldEl.appendChild(ph);
+      textfieldEl.appendChild(makeCursorEl());
+      return;
+    }
+    for(let i=0;i<text.length;i++){
+      if(cursorPos===i) textfieldEl.appendChild(makeCursorEl());
+      const ch = text[i];
+      if(ch==='\n'){
+        textfieldEl.appendChild(document.createElement('br'));
+      } else {
+        const span = document.createElement('span');
+        span.className = 'chr';
+        span.dataset.i = i;
+        span.textContent = ch;
+        textfieldEl.appendChild(span);
+      }
+    }
+    if(cursorPos===text.length) textfieldEl.appendChild(makeCursorEl());
+  }
+  // ---------------- Jembatan ke Android InputMethodService ----------------
+  // Jika halaman ini dimuat di dalam HtmlKeyboardService.java (lewat addJavascriptInterface),
+  // window.AndroidKeyboard akan otomatis tersedia dan setiap ketikan diteruskan
+  // ke InputConnection kolom teks yang sedang aktif (WhatsApp, Instagram, dll).
+  // Kalau dibuka di browser biasa untuk uji coba, bridge ini tidak ada sehingga
+  // keyboard tetap berfungsi normal memakai kotak teks internal di atas.
+  function hasAndroidBridge(){
+    return !!(window.AndroidKeyboard && window.AndroidKeyboard.commitText);
+  }
+  function bridgeCommit(str){
+    if(hasAndroidBridge()){
+      try{ window.AndroidKeyboard.commitText(str); }catch(e){}
+    }
+  }
+  function bridgeDeleteBackward(){
+    if(window.AndroidKeyboard && window.AndroidKeyboard.deleteBackward){
+      try{ window.AndroidKeyboard.deleteBackward(); }catch(e){}
+    }
+  }
+  function bridgeEnter(){
+    if(window.AndroidKeyboard && window.AndroidKeyboard.sendEnter){
+      try{ window.AndroidKeyboard.sendEnter(); return true; }catch(e){}
+    }
+    return false;
+  }
+
+  function appendText(str){
+    text = text.slice(0,cursorPos) + str + text.slice(cursorPos);
+    cursorPos += str.length;
+    renderText();
+    bridgeCommit(str);
+  }
+  function backspace(){
+    if(cursorPos<=0) return;
+    text = text.slice(0,cursorPos-1) + text.slice(cursorPos);
+    cursorPos -= 1;
+    renderText();
+    bridgeDeleteBackward();
+  }
+  function pressEnter(){
+    // Panggil sendEnter() dulu (bisa memicu tombol Kirim/Cari sesuai kolom aktif),
+    // baru perbarui pratinjau teks lokal secara terpisah agar tidak terkirim dobel.
+    const handled = bridgeEnter();
+    text = text.slice(0,cursorPos) + '\n' + text.slice(cursorPos);
+    cursorPos += 1;
+    renderText();
+    if(!handled){ /* sudah ditangani sebagai newline lokal di atas */ }
+  }
+  textfieldEl.addEventListener('click', (e)=>{
+    const span = e.target.closest('.chr');
+    if(span){
+      const i = parseInt(span.dataset.i, 10);
+      const rect = span.getBoundingClientRect();
+      cursorPos = (e.clientX - rect.left) > rect.width/2 ? i+1 : i;
+    } else {
+      cursorPos = text.length;
+    }
+    renderText();
+  });
+  document.getElementById('clearBtn').addEventListener('click', ()=>{ text=''; cursorPos=0; renderText(); });
+
+  // ---------------- Bubble + flash ----------------
+  function flash(el){ el.classList.add('is-active'); setTimeout(()=> el.classList.remove('is-active'), 150); }
+  function showBubble(el, label){
+    const bubble = el.querySelector('.bubble');
+    if(!bubble) return;
+    bubble.textContent = label;
+    bubble.classList.add('show');
+    setTimeout(()=> bubble.classList.remove('show'), 260);
+  }
+  function showStatus(msg){ document.getElementById('micStatus').innerHTML = msg; }
+
+  // ---------------- Keyboard modes: letters / symbols / emoji, plus Shift state ----------------
+  let mode = 'letters';
+  let shiftActive = false;
+  let capsLock = false;
+  let lastShiftTap = 0;
+
+  const SYMBOLS = ['@','#','$','_','&','-','+','(',')','/', '*','"',"'",':',';','!','?','~','`', '%','^','=','[',']','{','}'];
+  const numBtnEl = document.getElementById('numBtn');
+  const emojiBtnEl = document.getElementById('emojiBtn');
+  const keyboardEl2 = document.getElementById('keyboard');
+  const emojiPanelEl = document.getElementById('emojiPanel');
+
+  function shiftToggle(el){
+    flash(el);
+    const now = performance.now();
+    const isDoubleTap = (now - lastShiftTap) < 350;
+    lastShiftTap = now;
+    if(isDoubleTap){
+      capsLock = !capsLock;
+      shiftActive = capsLock;
+    } else if(capsLock){
+      capsLock = false;
+      shiftActive = false;
+    } else {
+      shiftActive = !shiftActive;
+    }
+    updateShiftVisual();
+  }
+
+  function updateShiftVisual(){
+    const shiftBtnEl = allKeys[29];
+    shiftBtnEl.classList.toggle('shift-on', shiftActive && !capsLock);
+    shiftBtnEl.classList.toggle('caps-lock', capsLock);
+    if(mode==='letters'){
+      LETTER_INDICES.forEach(i=>{
+        const el = allKeys[i];
+        const base = el.dataset.origChar;
+        el.querySelector('.ch').textContent = shiftActive ? base.toUpperCase() : base;
+      });
+    }
+  }
+
+  function applySymbolMode(isSymbol){
+    LETTER_INDICES.forEach((i, si)=>{
+      const el = allKeys[i];
+      const chSpan = el.querySelector('.ch');
+      if(isSymbol){
+        const symbol = SYMBOLS[si];
+        el.dataset.symbolChar = symbol;
+        chSpan.textContent = symbol;
+      } else {
+        const base = el.dataset.origChar;
+        chSpan.textContent = shiftActive ? base.toUpperCase() : base;
+      }
+      // note name + fret label stay visible in every mode
+    });
+  }
+
+  const EMOJIS = ['😀','😂','🥰','😎','🤔','😢','😡','👍','👎','👏','🙏','🔥','🎸','🎵','🎶','🎤','❤️','✨','🎉','💯','⭐','☀️','🌙','⚡','🍕','☕','🚀','✅','❌','😴','🥳','🤩','💜','🌈','🎂','🙌','😉','🥲','😇','🤗','🙃','😅','👋','🎈'];
+  const emojiKeys = []; // index-aligned with NOTES (0..35), so mic detection works in emoji mode too
+  NOTES.forEach((note, idx)=>{
+    const emo = EMOJIS[idx] || '❔';
+    const b = document.createElement('button');
+    b.className = 'emoji-btn';
+    b.dataset.emoji = emo;
+    b.dataset.note = note.name;
+    b.dataset.string = note.string;
+    b.dataset.fret = note.fret;
+    b.title = note.name;
+    b.innerHTML = '<span class="ch">'+emo+'</span><span class="tag">'+note.name+'</span><span class="bubble"></span>';
+    b.addEventListener('pointerdown', ()=>{
+      flash(b);
+      showBubble(b, emo);
+      appendText(emo);
+    });
+    emojiPanelEl.appendChild(b);
+    emojiKeys.push(b);
+  });
+
+  function setMode(newMode){
+    mode = newMode;
+    keyboardEl2.style.display = (mode==='emoji') ? 'none' : '';
+    emojiPanelEl.style.display = (mode==='emoji') ? 'grid' : 'none';
+    applySymbolMode(mode==='symbols');
+    numBtnEl.textContent = (mode==='symbols') ? 'ABC' : '?123';
+    emojiBtnEl.querySelector('.ch').textContent = (mode==='emoji') ? '🔤' : '😊';
+    if(mode==='symbols'){
+      showStatus(listening ? 'Mode simbol aktif — petik nada untuk mengetik tanda baca.' : 'Mode simbol aktif — lihat nada di bawah tiap tanda baca.');
+    } else if(mode==='emoji'){
+      showStatus(listening ? 'Mode emoji aktif — petik nada untuk mengetik emoji.' : 'Mode emoji aktif — lihat nada di bawah tiap emoji.');
+    } else {
+      showStatus(listening ? 'Mendengarkan… petik satu nada per satu.' : 'Petik nada satu-satu (bukan kunci penuh) untuk hasil terbaik.');
+    }
+  }
+
+  // ---------------- Key actions (silent — no internal synthesized audio) ----------------
+  function manualPress(el){
+    flash(el);
+    let ch;
+    if(mode==='symbols' && el.dataset.symbolChar){
+      ch = el.dataset.symbolChar;
+    } else {
+      const base = el.dataset.origChar;
+      ch = (shiftActive && /^[a-z]$/.test(base)) ? base.toUpperCase() : base;
+      if(shiftActive && !capsLock){ shiftActive=false; updateShiftVisual(); }
+    }
+    showBubble(el, ch);
+    appendText(ch);
+  }
+  function functionalPress(el){
+    flash(el);
+    const type = el.dataset.type;
+    if(type==='backspace'){ showBubble(el,'⌫'); backspace(); }
+    else if(type==='enter'){ showBubble(el,'↵'); pressEnter(); }
+    else if(type==='literal'){ const c = el.dataset.char; showBubble(el, c===' '?'␣':c); appendText(c); }
+  }
+  function autoTypeNote(idx){
+    if(mode==='emoji'){
+      const el = emojiKeys[idx];
+      if(!el) return null;
+      flash(el);
+      const emo = el.dataset.emoji;
+      showBubble(el, emo);
+      appendText(emo);
+      return emo;
+    }
+
+    const el = allKeys[idx];
+    if(!el) return null;
+    const type = el.dataset.type;
+
+    if(type==='note'){
+      flash(el);
+      const base = el.dataset.origChar;
+      let ch;
+      if(mode==='symbols' && el.dataset.symbolChar){
+        ch = el.dataset.symbolChar;
+      } else {
+        ch = (shiftActive && /^[a-z]$/.test(base)) ? base.toUpperCase() : base;
+      }
+      showBubble(el, ch);
+      appendText(ch);
+      if(mode!=='symbols' && shiftActive && !capsLock){ shiftActive=false; updateShiftVisual(); }
+      return ch;
+    } else if(type==='literal'){
+      flash(el);
+      const c = el.dataset.char;
+      showBubble(el, c===' ' ? '␣' : c);
+      appendText(c);
+      return c;
+    } else if(type==='backspace'){
+      flash(el); showBubble(el,'⌫'); backspace();
+      return '⌫';
+    } else if(type==='enter'){
+      flash(el); showBubble(el,'↵'); pressEnter();
+      return '\n';
+    } else if(el.id==='shiftBtn'){
+      shiftToggle(el);
+      showBubble(el, capsLock ? 'CAPS' : (shiftActive ? '⇧ ON' : '⇧'));
+      return '⇧';
+    } else if(el.id==='emojiBtn'){
+      flash(el);
+      setMode(mode==='emoji' ? 'letters' : 'emoji');
+      showBubble(el, mode==='emoji' ? '😊' : 'ABC');
+      return '😊';
+    } else if(el.id==='numBtn'){
+      flash(el);
+      setMode(mode==='symbols' ? 'letters' : 'symbols');
+      showBubble(el, mode==='symbols' ? '?123' : 'ABC');
+      return '?123';
+    }
+    return null;
+  }
+
+  // ---------------- Mic: monophonic pitch detection (autocorrelation) ----------------
+  const micBtn = document.getElementById('micBtn');
+  const levelBar = document.getElementById('levelBar');
+  let listening=false, micCtx=null, analyser=null, stream=null, rafId=null;
+  let state='idle', sampleAt=0, cooldownUntil=0, smoothedRms=0.001;
+
+  function autoCorrelate(buf, sampleRate){
+    const SIZE = buf.length;
+    let rms=0;
+    for(let i=0;i<SIZE;i++) rms += buf[i]*buf[i];
+    rms = Math.sqrt(rms/SIZE);
+    if(rms < 0.012) return -1;
+
+    let r1=0, r2=SIZE-1;
+    const thres=0.2;
+    for(let i=0;i<SIZE/2;i++){ if(Math.abs(buf[i])<thres){ r1=i; break; } }
+    for(let i=1;i<SIZE/2;i++){ if(Math.abs(buf[SIZE-i])<thres){ r2=SIZE-i; break; } }
+    const trimmed = buf.slice(r1, r2);
+    const n = trimmed.length;
+    if(n < 8) return -1;
+
+    const c = new Float32Array(n);
+    for(let lag=0; lag<n; lag++){
+      let sum=0;
+      for(let i=0; i<n-lag; i++) sum += trimmed[i]*trimmed[i+lag];
+      c[lag]=sum;
+    }
+    let d=0;
+    while(d<n-1 && c[d]>c[d+1]) d++;
+    let maxVal=-1, maxPos=-1;
+    for(let i=d;i<n;i++){
+      if(c[i]>maxVal){ maxVal=c[i]; maxPos=i; }
+    }
+    if(maxPos<=0) return -1;
+    let T0 = maxPos;
+    const x1=c[T0-1]||0, x2=c[T0], x3=(T0+1<n)?c[T0+1]:0;
+    const a=(x1+x3-2*x2)/2, b=(x3-x1)/2;
+    if(a) T0 = T0 - b/(2*a);
+    if(T0<=0) return -1;
+    return sampleRate/T0;
+  }
+
+  function micLoop(){
+    if(!listening) return;
+    const buf = new Float32Array(analyser.fftSize);
+    analyser.getFloatTimeDomainData(buf);
+    let sum=0; for(let i=0;i<buf.length;i++) sum+=buf[i]*buf[i];
+    const rms = Math.sqrt(sum/buf.length);
+    levelBar.style.width = Math.min(100, rms*400)+'%';
+    const now = performance.now();
+
+    if(state==='idle'){
+      if(rms>0.02 && rms>smoothedRms*1.6 && now>cooldownUntil){
+        state='sampling';
+        sampleAt = now + 45;
+        showStatus('Mendengar petikan…');
+      }
+    } else if(state==='sampling'){
+      if(now>=sampleAt){
+        const freq = autoCorrelate(buf, micCtx.sampleRate);
+        if(freq>0){
+          const midi = 69 + 12*Math.log2(freq/440);
+          const idx = Math.round(midi) - BASE_MIDI;
+          if(idx>=0 && idx<NOTE_COUNT){
+            const typed = autoTypeNote(idx);
+            const noteName = NOTES[idx].name;
+            const label = (typed===' ') ? '␣' : (typed==='\n' ? '↵' : typed);
+            showStatus('Nada <b>'+noteName+'</b> ('+freq.toFixed(0)+' Hz) → <b>"'+label+'"</b>');
+          } else {
+            showStatus('Nada di luar jangkauan '+NOTES[0].name+'–'+NOTES[NOTE_COUNT-1].name+' ('+freq.toFixed(0)+' Hz).');
+          }
+        } else {
+          showStatus('Nada belum terdeteksi jelas, coba petik lagi.');
+        }
+        state='idle';
+        cooldownUntil = now + 260;
+      }
+    }
+    smoothedRms = smoothedRms*0.85 + rms*0.15;
+    rafId = requestAnimationFrame(micLoop);
+  }
+
+  async function startMic(){
+    try{
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false }
+      });
+    }catch(err){
+      showStatus('Izin mikrofon ditolak atau tidak tersedia. Kamu tetap bisa ketuk tuts manual.');
+      return;
+    }
+    micCtx = new (window.AudioContext||window.webkitAudioContext)();
+    const src = micCtx.createMediaStreamSource(stream);
+    analyser = micCtx.createAnalyser();
+    analyser.fftSize = 4096;
+    src.connect(analyser);
+    listening = true;
+    micBtn.classList.add('on');
+    micBtn.textContent = '⏹ Berhenti Dengarkan';
+    document.getElementById('micToolBtn').classList.add('on');
+    showStatus('Mendengarkan… petik satu nada per satu.');
+    micLoop();
+  }
+  function stopMic(){
+    listening=false;
+    if(rafId) cancelAnimationFrame(rafId);
+    if(stream) stream.getTracks().forEach(t=>t.stop());
+    if(micCtx) micCtx.close();
+    micBtn.classList.remove('on');
+    micBtn.textContent='🎤 Dengarkan Gitar';
+    document.getElementById('micToolBtn').classList.remove('on');
+    levelBar.style.width='0%';
+    showStatus('Petik nada satu-satu (bukan kunci penuh) untuk hasil terbaik.');
+  }
+  micBtn.addEventListener('click', ()=>{ if(listening) stopMic(); else startMic(); });
+  const micToolBtn = document.getElementById('micToolBtn');
+  micToolBtn.addEventListener('click', ()=>{ if(listening) stopMic(); else startMic(); });
+
+  window.addEventListener('keydown', (e)=>{
+    const key = keyMap[e.key.toLowerCase()];
+    if(!key) return;
+    e.preventDefault();
+    if(key.dataset.type==='note') manualPress(key);
+    else functionalPress(key);
+  });
+
+  // ---------------- Floating keyboard mode (drag anywhere, like Gboard's floating keyboard) ----------------
+  const kbWrap = document.getElementById('kbWrap');
+  const kbHandle = document.getElementById('kbHandle');
+  const floatBtn = document.getElementById('floatBtn');
+  let isFloating = false;
+  let dragging = false, offsetX = 0, offsetY = 0;
+
+  floatBtn.addEventListener('click', ()=>{
+    isFloating = !isFloating;
+    if(isFloating){
+      const rect = kbWrap.getBoundingClientRect();
+      kbWrap.classList.remove('docked');
+      kbWrap.classList.add('floating');
+      kbWrap.style.transform = 'none';
+      kbWrap.style.left = Math.max(8, window.innerWidth/2 - 150) + 'px';
+      kbWrap.style.top = Math.max(8, window.innerHeight - rect.height - 90) + 'px';
+      kbWrap.style.bottom = 'auto';
+      floatBtn.textContent = '📌 Tempel ke Bawah';
+    } else {
+      kbWrap.classList.remove('floating');
+      kbWrap.classList.add('docked');
+      kbWrap.style.left = '50%';
+      kbWrap.style.top = 'auto';
+      kbWrap.style.bottom = '0';
+      kbWrap.style.transform = 'translateX(-50%)';
+      floatBtn.textContent = '🔀 Mengambang';
+    }
+    syncShellPadding();
+  });
+
+  kbHandle.addEventListener('pointerdown', (e)=>{
+    if(!isFloating) return;
+    dragging = true;
+    const rect = kbWrap.getBoundingClientRect();
+    offsetX = e.clientX - rect.left;
+    offsetY = e.clientY - rect.top;
+    kbHandle.setPointerCapture(e.pointerId);
+  });
+  kbHandle.addEventListener('pointermove', (e)=>{
+    if(!dragging) return;
+    let x = e.clientX - offsetX;
+    let y = e.clientY - offsetY;
+    const maxX = window.innerWidth - kbWrap.offsetWidth;
+    const maxY = window.innerHeight - kbWrap.offsetHeight;
+    x = Math.max(0, Math.min(maxX, x));
+    y = Math.max(0, Math.min(maxY, y));
+    kbWrap.style.left = x + 'px';
+    kbWrap.style.top = y + 'px';
+  });
+  kbHandle.addEventListener('pointerup', ()=>{ dragging = false; });
+  kbHandle.addEventListener('pointercancel', ()=>{ dragging = false; });
+
+  renderText();
+
+  // ---------------- Jaga agar konten (terutama kotak teks) tidak ketutup keyboard yang mengambang di bawah ----------------
+  const appShell = document.getElementById('appShell');
+  function syncShellPadding(){
+    if(isFloating){
+      appShell.style.paddingBottom = '16px';
+    } else {
+      const h = kbWrap.getBoundingClientRect().height;
+      appShell.style.paddingBottom = (h + 14) + 'px';
+    }
+  }
+  if('ResizeObserver' in window){
+    new ResizeObserver(syncShellPadding).observe(kbWrap);
+  } else {
+    window.addEventListener('resize', syncShellPadding);
+  }
+  syncShellPadding();
+
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', ()=>{
+      navigator.serviceWorker.register('sw.js').catch(()=>{});
+    });
+  }
+})();
+</script>
+</body>
+</html>

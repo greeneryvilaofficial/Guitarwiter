@@ -1,0 +1,65 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout kode
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependency npm
+        run: npm install
+
+      - name: Buat folder android/ kalau belum ada
+        run: |
+          if [ ! -d "android" ]; then
+            npx cap add android
+          else
+            echo "Folder android/ sudah ada, lewati."
+          fi
+
+      - name: Sync isi www/ ke android/
+        run: npx cap sync android
+
+      - name: Tempel HtmlKeyboardService.java ke lokasi paket Java
+        run: |
+          mkdir -p android/app/src/main/java/com/keyboardkustom/app
+          cp native-patches/HtmlKeyboardService.java android/app/src/main/java/com/keyboardkustom/app/HtmlKeyboardService.java
+
+      - name: Tempel method.xml ke folder res/xml
+        run: |
+          mkdir -p android/app/src/main/res/xml
+          cp native-patches/method.xml android/app/src/main/res/xml/method.xml
+
+      - name: Daftarkan service keyboard di AndroidManifest.xml
+        run: python3 native-patches/insert_service.py android/app/src/main/AndroidManifest.xml
+
+      - name: Beri izin eksekusi gradlew
+        run: chmod +x android/gradlew
+
+      - name: Build APK debug
+        working-directory: android
+        run: ./gradlew assembleDebug
+
+      - name: Unggah APK sebagai artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
