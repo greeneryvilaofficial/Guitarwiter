@@ -43,6 +43,11 @@ jobs:
           mkdir -p android/app/src/main/java/com/keyboardkustom/app
           cp native-patches/HtmlKeyboardService.java android/app/src/main/java/com/keyboardkustom/app/HtmlKeyboardService.java
 
+      - name: Tempel MainActivity.java (versi yang minta izin mikrofon)
+        run: |
+          mkdir -p android/app/src/main/java/com/keyboardkustom/app
+          cp native-patches/MainActivity.java android/app/src/main/java/com/keyboardkustom/app/MainActivity.java
+
       - name: Tempel method.xml ke folder res/xml
         run: |
           mkdir -p android/app/src/main/res/xml
@@ -51,6 +56,18 @@ jobs:
       - name: Daftarkan service keyboard di AndroidManifest.xml
         run: python3 native-patches/insert_service.py android/app/src/main/AndroidManifest.xml
 
+      - name: Tambahkan izin RECORD_AUDIO di AndroidManifest.xml
+        run: python3 native-patches/insert_permission.py android/app/src/main/AndroidManifest.xml
+
+      - name: Decode keystore dari secret (kalau ada)
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/release.keystore
+
+      - name: Tambahkan signing config ke build.gradle (kalau keystore tersedia)
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        run: python3 native-patches/insert_signing.py android/app/build.gradle
+
       - name: Beri izin eksekusi gradlew
         run: chmod +x android/gradlew
 
@@ -58,8 +75,25 @@ jobs:
         working-directory: android
         run: ./gradlew assembleDebug
 
-      - name: Unggah APK sebagai artifact
+      - name: Build APK release (signed)
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        working-directory: android
+        env:
+          KEYSTORE_PATH: release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleRelease
+
+      - name: Unggah APK debug sebagai artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Unggah APK release sebagai artifact (kalau ada)
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
