@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>Guitar writer— Nada Gitar Jadi Ketikan Otomatis</title>
+<title>Genjreng Ketik — Nada Gitar Jadi Ketikan Otomatis</title>
 <meta name="description" content="Petik nada di gitar aslimu — mikrofon mendeteksinya secara real-time dan huruf yang sesuai otomatis terketik. Keyboard virtual bergaya Google Keyboard lengkap dengan Shift, mode simbol, emoji, dan mode mengambang.">
 
 <link rel="manifest" href="manifest.json">
@@ -13,15 +13,15 @@
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Guitar">
+<meta name="apple-mobile-web-app-title" content="Genjreng">
 <meta name="mobile-web-app-capable" content="yes">
 
 <meta property="og:type" content="website">
-<meta property="og:title" content="Guitar writer — Nada Gitar Jadi Ketikan Otomatis">
+<meta property="og:title" content="Genjreng Ketik — Nada Gitar Jadi Ketikan Otomatis">
 <meta property="og:description" content="Petik nada di gitar aslimu, dan huruf yang sesuai otomatis terketik lewat keyboard virtual bergaya Google Keyboard.">
 <meta property="og:image" content="icon-512.png">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Guitar writer">
+<meta name="twitter:title" content="Genjreng Ketik">
 <meta name="twitter:description" content="Nada gitar jadi ketikan otomatis, langsung di browser.">
 <meta name="twitter:image" content="icon-512.png">
 <style>
@@ -50,6 +50,27 @@
     --key-bubble-bg:#101114;
     --key-bubble-text:#FFFFFF;
     --key-enter-bg:#1CC9A5;
+  }
+  /* ---- Tema alternatif ala Gboard: tinggal ganti class di <body> ---- */
+  body.theme-light{
+    --kb-bg:#E8EAED; --key-bg:#FFFFFF; --key-fn-bg:#DADCE0; --key-text:#202124;
+    --key-tag:#1A73E8; --key-active-bg:#C2E7FF; --key-fn-active-bg:#BDC1C6;
+    --key-bubble-bg:#202124; --key-bubble-text:#FFFFFF; --key-enter-bg:#1A73E8;
+  }
+  body.theme-blue{
+    --kb-bg:#0B2545; --key-bg:#13315C; --key-fn-bg:#0E223F; --key-text:#E8F0FE;
+    --key-tag:#8AB4F8; --key-active-bg:#1A4A8A; --key-fn-active-bg:#1A4A8A;
+    --key-bubble-bg:#08182E; --key-bubble-text:#FFFFFF; --key-enter-bg:#4C8DFF;
+  }
+  body.theme-purple{
+    --kb-bg:#241B2F; --key-bg:#3A2C4A; --key-fn-bg:#2B2038; --key-text:#F1E8FA;
+    --key-tag:#D9B3FF; --key-active-bg:#5B3E75; --key-fn-active-bg:#4A3560;
+    --key-bubble-bg:#1A1220; --key-bubble-text:#FFFFFF; --key-enter-bg:#B388FF;
+  }
+  body.theme-green{
+    --kb-bg:#0F2A1E; --key-bg:#17402C; --key-fn-bg:#0F2A1E; --key-text:#E4F5EA;
+    --key-tag:#7CE7C4; --key-active-bg:#1F6B47; --key-fn-active-bg:#1B5A3D;
+    --key-bubble-bg:#081A11; --key-bubble-text:#FFFFFF; --key-enter-bg:#2ECC8F;
   }
   *{box-sizing:border-box;}
   html,body{ height:100%; }
@@ -202,7 +223,65 @@
   }
   .emoji-btn .ch{ font-size:1.1rem; line-height:1; }
   .emoji-btn .tag{ font-size:.42rem; font-weight:700; color:var(--key-tag); }
+  .keyboard, .emoji-panel{ contain: layout style paint; }
+  .key, .emoji-btn{ touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
   .emoji-btn.is-active{ background:var(--key-active-bg); }
+  .emoji-back-btn{ background:var(--key-active-bg); font-weight:700; }
+
+  /* ---- Suggestion bar (prediksi kata) ---- */
+  .suggest-bar{
+    display:flex; gap:4px; padding:6px 8px; background:var(--kb-bg);
+    border-bottom:1px solid rgba(255,255,255,.06); min-height:34px;
+  }
+  .suggest-chip{
+    flex:1; background:none; border:none; color:var(--key-text);
+    font-family:inherit; font-size:.85rem; padding:6px 4px; border-radius:6px;
+    text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .suggest-chip:active{ background:rgba(255,255,255,.1); }
+  .suggest-chip.is-word{ font-weight:700; }
+
+  /* ---- Panel Settings (tema) ---- */
+  .settings-panel{
+    display:none; padding:14px 12px; background:var(--kb-bg); color:var(--key-text);
+    font-family:'Roboto', sans-serif;
+  }
+  .settings-panel h4{ margin:0 0 10px; font-size:.85rem; color:var(--key-tag); }
+  .theme-swatches{ display:flex; gap:12px; flex-wrap:wrap; }
+  .theme-swatch{
+    width:44px; height:44px; border-radius:50%; border:2px solid transparent;
+    cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:1rem;
+  }
+  .theme-swatch.selected{ border-color:var(--key-tag); }
+  .theme-swatch[data-theme="dark"]{ background:#202124; }
+  .theme-swatch[data-theme="light"]{ background:#FFFFFF; }
+  .theme-swatch[data-theme="blue"]{ background:#13315C; }
+  .theme-swatch[data-theme="purple"]{ background:#3A2C4A; }
+  .theme-swatch[data-theme="green"]{ background:#17402C; }
+
+  /* ---- Panel Clipboard ---- */
+  .clipboard-panel{
+    display:none; flex-direction:column; gap:6px; padding:8px;
+    background:var(--kb-bg); max-height:260px; overflow-y:auto;
+  }
+  .clipboard-item{
+    background:var(--key-bg); color:var(--key-text); border:none; border-radius:8px;
+    padding:10px 12px; text-align:left; font-family:inherit; font-size:.85rem;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .clipboard-item:active{ background:var(--key-active-bg); }
+  .clipboard-empty{ color:var(--muted); font-size:.8rem; padding:10px 4px; }
+
+  /* ---- Mode satu tangan ---- */
+  .kb-float-wrap.one-left .keyboard-inner,
+  .kb-float-wrap.one-right .keyboard-inner{ transform-origin:bottom left; transform:scale(.78); }
+  .kb-float-wrap.one-right .keyboard-inner{ transform-origin:bottom right; margin-left:auto; }
+  .one-hand-flip{
+    display:none; position:absolute; bottom:8px; width:40px; height:40px; border-radius:50%;
+    background:var(--key-fn-bg); color:var(--key-text); border:none; font-size:1.1rem;
+  }
+  .kb-float-wrap.one-left .one-hand-flip{ display:block; right:6px; }
+  .kb-float-wrap.one-right .one-hand-flip{ display:block; left:6px; }
 
   .key .bubble, .emoji-btn .bubble{
     position:absolute; bottom:100%; left:50%;
@@ -252,15 +331,30 @@
   <div class="kb-handle" id="kbHandle"><span class="dots"></span></div>
   <div class="gboard-toolbar" id="gboardToolbar">
     <button class="gtool-btn" type="button" title="Aplikasi">⊞</button>
-    <button class="gtool-btn" type="button" title="Stiker">🗨</button>
-    <button class="gtool-btn" type="button" title="GIF">GIF</button>
+    <button class="gtool-btn" id="clipboardBtn" type="button" title="Clipboard">📋</button>
+    <button class="gtool-btn" id="oneHandBtn" type="button" title="Mode satu tangan">✋</button>
     <div class="gtool-spacer"></div>
-    <button class="gtool-btn" type="button" title="Setelan">⚙</button>
+    <button class="gtool-btn" id="settingsBtn" type="button" title="Setelan">⚙</button>
     <button class="gtool-btn" type="button" title="Terjemahan">あA</button>
     <button class="gtool-btn mic-tool" id="micToolBtn" type="button" title="Dengarkan gitar">🎤</button>
   </div>
-  <div class="keyboard" id="keyboard"></div>
-  <div class="emoji-panel" id="emojiPanel"></div>
+  <div class="suggest-bar" id="suggestBar"></div>
+  <div class="settings-panel" id="settingsPanel">
+    <h4>Pilih Tema Warna</h4>
+    <div class="theme-swatches" id="themeSwatches">
+      <div class="theme-swatch" data-theme="dark" title="Gelap"></div>
+      <div class="theme-swatch" data-theme="light" title="Terang">🔆</div>
+      <div class="theme-swatch" data-theme="blue" title="Biru"></div>
+      <div class="theme-swatch" data-theme="purple" title="Ungu"></div>
+      <div class="theme-swatch" data-theme="green" title="Hijau"></div>
+    </div>
+  </div>
+  <div class="clipboard-panel" id="clipboardPanel"></div>
+  <div class="keyboard-inner" id="keyboardInner">
+    <div class="keyboard" id="keyboard"></div>
+    <div class="emoji-panel" id="emojiPanel"></div>
+  </div>
+  <button class="one-hand-flip" id="oneHandFlip" type="button" title="Pindah sisi">⇄</button>
 </div>
 
 <script>
@@ -485,6 +579,7 @@
     cursorPos += str.length;
     renderText();
     bridgeCommit(str);
+    renderSuggestions();
   }
   function backspace(){
     if(cursorPos<=0) return;
@@ -492,6 +587,7 @@
     cursorPos -= 1;
     renderText();
     bridgeDeleteBackward();
+    renderSuggestions();
   }
   function pressEnter(){
     // Panggil sendEnter() dulu (bisa memicu tombol Kirim/Cari sesuai kolom aktif),
@@ -500,6 +596,7 @@
     text = text.slice(0,cursorPos) + '\n' + text.slice(cursorPos);
     cursorPos += 1;
     renderText();
+    renderSuggestions();
     if(!handled){ /* sudah ditangani sebagai newline lokal di atas */ }
   }
   textfieldEl.addEventListener('click', (e)=>{
@@ -516,7 +613,7 @@
   document.getElementById('clearBtn').addEventListener('click', ()=>{ text=''; cursorPos=0; renderText(); });
 
   // ---------------- Bubble + flash ----------------
-  function flash(el){ el.classList.add('is-active'); setTimeout(()=> el.classList.remove('is-active'), 150); }
+  function flash(el){ el.classList.add('is-active'); setTimeout(()=> el.classList.remove('is-active'), 80); }
   function showBubble(el, label){
     const bubble = el.querySelector('.bubble');
     if(!bubble) return;
@@ -525,6 +622,137 @@
     setTimeout(()=> bubble.classList.remove('show'), 260);
   }
   function showStatus(msg){ document.getElementById('micStatus').innerHTML = msg; }
+
+  // ---------------- Bridge tambahan: hapus beberapa karakter sekaligus (dipakai saat ganti kata via prediksi) ----------------
+  function bridgeDeleteBackwardN(n){
+    if(window.AndroidKeyboard && window.AndroidKeyboard.deleteBackwardN){
+      try{ window.AndroidKeyboard.deleteBackwardN(n); return; }catch(e){}
+    }
+    // Fallback kalau bridge lama belum punya deleteBackwardN: panggil deleteBackward berkali-kali.
+    for(let i=0;i<n;i++) bridgeDeleteBackward();
+  }
+
+  // ---------------- Fitur 1: Prediksi kata / saran ketikan ----------------
+  const DICTIONARY = ['saya','kamu','dia','kita','kami','mereka','aku','anda','ini','itu',
+    'yang','dan','atau','tapi','tetapi','karena','jika','kalau','maka','supaya','agar',
+    'akan','sudah','belum','sedang','masih','tidak','bukan','jangan','boleh','harus',
+    'bisa','mau','ingin','suka','cinta','sayang','baik','bagus','buruk','jelek',
+    'besar','kecil','banyak','sedikit','semua','sebagian','setiap','bagaimana','kenapa','mengapa',
+    'kapan','dimana','siapa','apa','apakah','iya','tidak','oke','baiklah','terima',
+    'kasih','terimakasih','maaf','permisi','tolong','mohon','silakan','selamat','pagi','siang',
+    'sore','malam','hari','ini','besok','kemarin','sekarang','nanti','tadi','lagi',
+    'juga','hanya','saja','cuma','memang','sebenarnya','sebetulnya','mungkin','pasti','tentu',
+    'gitar','musik','lagu','nada','main','bermain','nyanyi','chord','senar','ketik',
+    'kerja','sekolah','kuliah','rumah','jalan','makan','minum','tidur','bangun','pulang',
+    'pergi','datang','pulang','sampai','tunggu','tunggu','sabar','cepat','lambat','pelan',
+    'whatsapp','chat','pesan','telepon','video','foto','kirim','terima','buka','tutup',
+    'website','aplikasi','android','keyboard','fitur','update','baru','lama','coba','tes'];
+
+  function getCurrentWordRange(){
+    let start = cursorPos;
+    while(start>0 && !/[\s\n]/.test(text[start-1])) start--;
+    return { start, end: cursorPos, word: text.slice(start, cursorPos) };
+  }
+
+  function renderSuggestions(){
+    const bar = document.getElementById('suggestBar');
+    bar.innerHTML = '';
+    const { word } = getCurrentWordRange();
+    let candidates = [];
+    if(word.length > 0){
+      const lower = word.toLowerCase();
+      candidates = DICTIONARY.filter(w => w.startsWith(lower)).slice(0,3);
+      // Tombol pertama selalu kata yang sedang diketik apa adanya, biar bisa "diterima" langsung.
+      candidates = [word, ...candidates.filter(c => c.toLowerCase() !== lower)].slice(0,3);
+    } else {
+      candidates = ['Halo', 'Terima kasih', 'Oke'];
+    }
+    candidates.forEach((c, idx) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'suggest-chip' + (idx===0 && word.length>0 ? ' is-word' : '');
+      chip.textContent = c;
+      chip.addEventListener('pointerdown', () => applySuggestion(c));
+      bar.appendChild(chip);
+    });
+  }
+
+  function applySuggestion(chosen){
+    const { start, end, word } = getCurrentWordRange();
+    const removeCount = word.length;
+    text = text.slice(0, start) + chosen + ' ' + text.slice(end);
+    cursorPos = start + chosen.length + 1;
+    renderText();
+    if(removeCount > 0) bridgeDeleteBackwardN(removeCount);
+    bridgeCommit(chosen + ' ');
+    renderSuggestions();
+  }
+
+  // ---------------- Fitur 2: Clipboard riwayat ----------------
+  let clipboardHistory = [];
+  try{ clipboardHistory = JSON.parse(localStorage.getItem('genjreng_clipboard') || '[]'); }catch(e){}
+
+  function saveClipboardHistory(){
+    try{ localStorage.setItem('genjreng_clipboard', JSON.stringify(clipboardHistory.slice(0,15))); }catch(e){}
+  }
+  function renderClipboardPanel(){
+    const panel = document.getElementById('clipboardPanel');
+    panel.innerHTML = '';
+    if(clipboardHistory.length === 0){
+      const empty = document.createElement('div');
+      empty.className = 'clipboard-empty';
+      empty.textContent = 'Belum ada riwayat copy. Copy teks di aplikasi lain, nanti muncul di sini.';
+      panel.appendChild(empty);
+      return;
+    }
+    clipboardHistory.forEach((item) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'clipboard-item';
+      btn.textContent = item;
+      btn.addEventListener('pointerdown', () => {
+        appendText(item);
+        renderSuggestions();
+      });
+      panel.appendChild(btn);
+    });
+  }
+  // Dipanggil dari sisi Java (HtmlKeyboardService) setiap kali clipboard sistem Android berubah.
+  window.onClipboardChanged = function(newText){
+    if(!newText) return;
+    clipboardHistory = clipboardHistory.filter(t => t !== newText);
+    clipboardHistory.unshift(newText);
+    clipboardHistory = clipboardHistory.slice(0,15);
+    saveClipboardHistory();
+    renderClipboardPanel();
+  };
+
+  // ---------------- Fitur 3: Tema warna ----------------
+  function applyTheme(name){
+    document.body.className = document.body.className.replace(/theme-\S+/g, '').trim();
+    if(name !== 'dark') document.body.classList.add('theme-' + name);
+    document.querySelectorAll('.theme-swatch').forEach(sw => {
+      sw.classList.toggle('selected', sw.dataset.theme === name);
+    });
+    try{ localStorage.setItem('genjreng_theme', name); }catch(e){}
+  }
+  function loadSavedTheme(){
+    let saved = 'dark';
+    try{ saved = localStorage.getItem('genjreng_theme') || 'dark'; }catch(e){}
+    applyTheme(saved);
+  }
+
+  // ---------------- Fitur 4: Mode satu tangan ----------------
+  function toggleOneHand(){
+    const wrap = document.getElementById('kbWrap');
+    if(wrap.classList.contains('one-left')){
+      wrap.classList.remove('one-left'); wrap.classList.add('one-right');
+    } else if(wrap.classList.contains('one-right')){
+      wrap.classList.remove('one-right');
+    } else {
+      wrap.classList.add('one-left');
+    }
+  }
 
   // ---------------- Keyboard modes: letters / symbols / emoji, plus Shift state ----------------
   let mode = 'letters';
@@ -604,6 +832,26 @@
     emojiPanelEl.appendChild(b);
     emojiKeys.push(b);
   });
+
+  // Tombol "kembali ke huruf" khusus di dalam panel emoji.
+  // Ini perlu ditaruh di sini (bukan cuma di dalam #keyboard) karena
+  // #keyboard disembunyikan total saat mode emoji aktif, jadi tombol
+  // toggle yang lama ikut hilang dan tidak bisa dipakai untuk kembali.
+  const emojiBackBtn = document.createElement('button');
+  emojiBackBtn.type = 'button';
+  emojiBackBtn.className = 'emoji-btn emoji-back-btn';
+  emojiBackBtn.innerHTML = '<span class="ch">🔤</span><span class="tag">Kembali</span>';
+  emojiBackBtn.addEventListener('pointerdown', () => { setMode('letters'); });
+  emojiPanelEl.insertBefore(emojiBackBtn, emojiPanelEl.firstChild);
+
+  // Tombol hapus juga ditaruh di dalam panel emoji dengan alasan yang sama:
+  // supaya tidak perlu kembali ke huruf dulu hanya untuk menghapus.
+  const emojiDeleteBtn = document.createElement('button');
+  emojiDeleteBtn.type = 'button';
+  emojiDeleteBtn.className = 'emoji-btn emoji-back-btn';
+  emojiDeleteBtn.innerHTML = '<span class="ch">⌫</span><span class="tag">Hapus</span>';
+  emojiDeleteBtn.addEventListener('pointerdown', () => { flash(emojiDeleteBtn); backspace(); });
+  emojiPanelEl.insertBefore(emojiDeleteBtn, emojiPanelEl.firstChild);
 
   function setMode(newMode){
     mode = newMode;
@@ -902,6 +1150,47 @@
       navigator.serviceWorker.register('sw.js').catch(()=>{});
     });
   }
+
+  // ---------------- Inisialisasi & wiring fitur baru ----------------
+  loadSavedTheme();
+  renderSuggestions();
+  renderClipboardPanel();
+
+  document.getElementById('themeSwatches').addEventListener('pointerdown', (e)=>{
+    const sw = e.target.closest('.theme-swatch');
+    if(sw) applyTheme(sw.dataset.theme);
+  });
+
+  const settingsBtn = document.getElementById('settingsBtn');
+  const settingsPanel = document.getElementById('settingsPanel');
+  const clipboardBtn = document.getElementById('clipboardBtn');
+  const clipboardPanel = document.getElementById('clipboardPanel');
+  const keyboardInner = document.getElementById('keyboardInner');
+
+  function closeAllPanels(){
+    settingsPanel.style.display = 'none';
+    clipboardPanel.style.display = 'none';
+    keyboardInner.style.display = '';
+  }
+  settingsBtn.addEventListener('click', ()=>{
+    const willOpen = settingsPanel.style.display !== 'block';
+    closeAllPanels();
+    if(willOpen){ settingsPanel.style.display = 'block'; keyboardInner.style.display = 'none'; }
+    syncShellPadding();
+  });
+  clipboardBtn.addEventListener('click', ()=>{
+    const willOpen = clipboardPanel.style.display !== 'flex';
+    closeAllPanels();
+    if(willOpen){
+      renderClipboardPanel();
+      clipboardPanel.style.display = 'flex';
+      keyboardInner.style.display = 'none';
+    }
+    syncShellPadding();
+  });
+
+  document.getElementById('oneHandBtn').addEventListener('click', ()=>{ toggleOneHand(); syncShellPadding(); });
+  document.getElementById('oneHandFlip').addEventListener('click', toggleOneHand);
 })();
 </script>
 </body>
