@@ -8,6 +8,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
 
     steps:
       - name: Checkout kode
@@ -60,12 +62,12 @@ jobs:
         run: python3 native-patches/insert_permission.py android/app/src/main/AndroidManifest.xml
 
       - name: Decode keystore dari secret (kalau ada)
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        if: env.KEYSTORE_BASE64 != ''
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/release.keystore
+          echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
 
       - name: Tambahkan signing config ke build.gradle (kalau keystore tersedia)
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        if: env.KEYSTORE_BASE64 != ''
         run: python3 native-patches/insert_signing.py android/app/build.gradle
 
       - name: Beri izin eksekusi gradlew
@@ -76,7 +78,7 @@ jobs:
         run: ./gradlew assembleDebug
 
       - name: Build APK release (signed)
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        if: env.KEYSTORE_BASE64 != ''
         working-directory: android
         env:
           KEYSTORE_PATH: release.keystore
@@ -92,7 +94,7 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
 
       - name: Unggah APK release sebagai artifact (kalau ada)
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        if: env.KEYSTORE_BASE64 != ''
         uses: actions/upload-artifact@v4
         with:
           name: app-release-apk
