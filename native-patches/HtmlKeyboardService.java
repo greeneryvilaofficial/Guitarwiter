@@ -1,11 +1,16 @@
 package com.keyboardkustom.app;
 
 import android.inputmethodservice.InputMethodService;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
 import android.webkit.JavascriptInterface;
+import android.webkit.PermissionRequest;
+import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -18,9 +23,27 @@ import android.webkit.WebViewClient;
 public class HtmlKeyboardService extends InputMethodService {
 
     private WebView webView;
+    private ClipboardManager clipboardManager;
+    private final ClipboardManager.OnPrimaryClipChangedListener clipListener = this::pushClipboardToJs;
 
     @Override
     public View onCreateInputView() {
+        // Booster: WebView hanya dibuat & di-load SEKALI. Sebelumnya, setiap
+        // kali keyboard muncul (pindah kolom/aplikasi), sistem memanggil
+        // onCreateInputView() lagi dan kode lama membuat WebView baru +
+        // reload index.html dari nol setiap saat — ini yang bikin terasa
+        // delay/lag di HP dengan spek ringan. Sekarang WebView yang sama
+        // dipakai ulang terus, jadi keyboard muncul instan setelah kemunculan pertama.
+        if (webView != null) {
+            // WebView cuma boleh punya satu parent. Lepas dulu dari parent
+            // lama sebelum dipakai ulang, kalau tidak sistem akan crash.
+            ViewGroup parent = (ViewGroup) webView.getParent();
+            if (parent != null) {
+                parent.removeView(webView);
+            }
+            return webView;
+        }
+
         webView = new WebView(this);
         WebSettings webSettings = webView.getSettings();
 
@@ -29,8 +52,40 @@ public class HtmlKeyboardService extends InputMethodService {
         webSettings.setDomStorageEnabled(true);
         webSettings.setAllowFileAccess(true);
 
+        // Booster rendering: pakai layer hardware & matikan overscroll bounce
+        // yang tidak perlu untuk tampilan keyboard.
+        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
+
         // Daftarkan jembatan: di JavaScript akan muncul sebagai window.AndroidKeyboard
         webView.addJavascriptInterface(new KeyboardBridge(), "AndroidKeyboard");
+
+        // Fitur clipboard: pantau perubahan clipboard sistem Android, lalu
+        // kirim isinya ke JavaScript supaya muncul di panel riwayat clipboard.
+        clipboardManager = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        if (clipboardManager != null) {
+            clipboardManager.addPrimaryClipChangedListener(clipListener);
+        }
+
+        // Fitur mikrofon (deteksi nada gitar): JS memanggil getUserMedia({audio:true}),
+        // dan WebView butuh persetujuan lewat onPermissionRequest ini. Diberikan otomatis
+        // KALAU izin RECORD_AUDIO di level sistem Android sudah diizinkan lewat MainActivity
+        // (dicek otomatis oleh Android — kalau belum diizinkan, request ini tidak akan pernah
+        // datang dan mic tidak akan aktif, makanya aplikasi wajib dibuka sekali dulu).
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onPermissionRequest(final PermissionRequest request) {
+                runOnUiThreadSafe(() -> {
+                    for (String resource : request.getResources()) {
+                        if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource)) {
+                            request.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
+                            return;
+                        }
+                    }
+                    request.deny();
+                });
+            }
+        });
 
         // Memuat file HTML dari aset lokal Capacitor
         webView.loadUrl("file:///android_asset/public/index.html");
@@ -47,6 +102,36 @@ public class HtmlKeyboardService extends InputMethodService {
     @Override
     public void onStartInputView(EditorInfo info, boolean restarting) {
         super.onStartInputView(info, restarting);
+    }
+
+    @Override
+    public void onDestroy() {
+        if (clipboardManager != null) {
+            clipboardManager.removePrimaryClipChangedListener(clipListener);
+        }
+        super.onDestroy();
+    }
+
+    /** Ambil teks clipboard terbaru, lalu kirim ke JavaScript lewat window.onClipboardChanged(). */
+    private void pushClipboardToJs() {
+        if (clipboardManager == null || webView == null) return;
+        if (!clipboardManager.hasPrimaryClip()) return;
+
+        ClipData clip = clipboardManager.getPrimaryClip();
+        if (clip == null || clip.getItemCount() == 0) return;
+
+        CharSequence item = clip.getItemAt(0).coerceToText(this);
+        if (item == null) return;
+
+        String escaped = item.toString()
+                .replace("\\", "\\\\")
+                .replace("'", "\\'")
+                .replace("\n", "\\n");
+
+        webView.post(() ->
+                webView.evaluateJavascript(
+                        "window.onClipboardChanged && window.onClipboardChanged('" + escaped + "')",
+                        null));
     }
 
     /** Objek yang diekspos ke JavaScript lewat window.AndroidKeyboard.* */
@@ -68,6 +153,17 @@ public class HtmlKeyboardService extends InputMethodService {
                 InputConnection ic = getCurrentInputConnection();
                 if (ic != null) {
                     ic.deleteSurroundingText(1, 0);
+                }
+            });
+        }
+
+        /** Hapus beberapa karakter sekaligus — dipakai saat kata diganti lewat prediksi. */
+        @JavascriptInterface
+        public void deleteBackwardN(final int n) {
+            runOnUiThreadSafe(() -> {
+                InputConnection ic = getCurrentInputConnection();
+                if (ic != null && n > 0) {
+                    ic.deleteSurroundingText(n, 0);
                 }
             });
         }
