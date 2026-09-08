@@ -28,6 +28,7 @@ public class HtmlKeyboardService extends InputMethodService {
     private WebView webView;
     private WebViewAssetLoader assetLoader;
     private ClipboardManager clipboardManager;
+    private NativeMicPitchDetector nativeMic;
     private final ClipboardManager.OnPrimaryClipChangedListener clipListener = this::pushClipboardToJs;
 
     @Override
@@ -63,6 +64,8 @@ public class HtmlKeyboardService extends InputMethodService {
 
         // Daftarkan jembatan: di JavaScript akan muncul sebagai window.AndroidKeyboard
         webView.addJavascriptInterface(new KeyboardBridge(), "AndroidKeyboard");
+
+        nativeMic = new NativeMicPitchDetector(this);
 
         // Fitur clipboard: pantau perubahan clipboard sistem Android, lalu
         // kirim isinya ke JavaScript supaya muncul di panel riwayat clipboard.
@@ -132,6 +135,9 @@ public class HtmlKeyboardService extends InputMethodService {
     public void onDestroy() {
         if (clipboardManager != null) {
             clipboardManager.removePrimaryClipChangedListener(clipListener);
+        }
+        if (nativeMic != null) {
+            nativeMic.stop();
         }
         super.onDestroy();
     }
@@ -233,6 +239,52 @@ public class HtmlKeyboardService extends InputMethodService {
                     imm.showInputMethodPicker();
                 }
             });
+        }
+
+        /**
+         * Mulai deteksi nada LEWAT JAVA NATIVE (AudioRecord), bukan getUserMedia().
+         * Hasil deteksi dikirim balik ke JS lewat window.onNativePitchIndex/dst.
+         */
+        @JavascriptInterface
+        public boolean startNativeMic() {
+            if (nativeMic == null) return false;
+            if (!nativeMic.hasPermission()) {
+                runOnUiThreadSafe(() -> webView.evaluateJavascript(
+                        "window.onNativeMicStatus && window.onNativeMicStatus('permission', false)", null));
+                return false;
+            }
+            boolean started = nativeMic.start(new NativeMicPitchDetector.Listener() {
+                @Override
+                public void onOnsetDetected() {
+                    webView.evaluateJavascript(
+                            "window.onNativeMicStatus && window.onNativeMicStatus('onset', true)", null);
+                }
+                @Override
+                public void onPitchIndex(int idx, double freq) {
+                    webView.evaluateJavascript(
+                            "window.onNativePitchIndex && window.onNativePitchIndex(" + idx + "," + freq + ")", null);
+                }
+                @Override
+                public void onOutOfRange(double freq) {
+                    webView.evaluateJavascript(
+                            "window.onNativeOutOfRange && window.onNativeOutOfRange(" + freq + ")", null);
+                }
+                @Override
+                public void onUnclear() {
+                    webView.evaluateJavascript(
+                            "window.onNativeUnclear && window.onNativeUnclear()", null);
+                }
+            });
+            if (started) {
+                runOnUiThreadSafe(() -> webView.evaluateJavascript(
+                        "window.onNativeMicStatus && window.onNativeMicStatus('listening', true)", null));
+            }
+            return started;
+        }
+
+        @JavascriptInterface
+        public void stopNativeMic() {
+            if (nativeMic != null) nativeMic.stop();
         }
     }
 
