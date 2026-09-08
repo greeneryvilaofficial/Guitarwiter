@@ -68,6 +68,12 @@ jobs:
           mkdir -p android/app/src/main/java/com/keyboardkustom/app
           cp native-patches/HtmlKeyboardService.java android/app/src/main/java/com/keyboardkustom/app/HtmlKeyboardService.java
 
+      - name: Tempel NativeMicPitchDetector.java (deteksi nada native, ganti getUserMedia)
+        run: |
+          set -e
+          mkdir -p android/app/src/main/java/com/keyboardkustom/app
+          cp native-patches/NativeMicPitchDetector.java android/app/src/main/java/com/keyboardkustom/app/NativeMicPitchDetector.java
+
       - name: Tempel MainActivity.java (versi yang minta izin mikrofon)
         run: |
           set -e
