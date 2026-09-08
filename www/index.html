@@ -79,87 +79,31 @@
     min-height:100dvh;
     background:var(--kb-bg);
     font-family:'Roboto', sans-serif;
-    display:flex;
-    justify-content:center;
     color:var(--key-text);
     overflow-x:hidden;
   }
 
-  .app-shell{
+  /* Halaman ini murni tampilan keyboard saja (tanpa contoh kotak teks /
+     judul aplikasi) — dibuat supaya saat dimuat sebagai keyboard sungguhan
+     lewat HtmlKeyboardService.java, yang tampil cuma keyboard-nya, mengisi
+     penuh area yang diberikan Android untuk keyboard. */
+  .kb-float-wrap{
     width:100%;
     max-width:480px;
-    background:var(--screen);
-    color:#1F1F1F;
-    min-height:100dvh;
-    padding:16px 14px 12px;
-    display:flex;
-    flex-direction:column;
-  }
-
-  h1{ font-size:1rem; font-weight:700; margin:0 0 2px; }
-  .sub{ font-size:.72rem; color:var(--muted); margin:0 0 12px; line-height:1.4; }
-
-  .mic-row{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }
-  .mic-btn{
-    display:flex; align-items:center; gap:6px;
-    border:none; background:var(--accent-dim); color:var(--accent);
-    font-weight:700; font-size:.78rem; padding:9px 14px; border-radius:20px; cursor:pointer;
-  }
-  .mic-btn.on{ background:var(--danger); color:#fff; }
-  .level-wrap{ flex:1; height:8px; background:#E8EAED; border-radius:4px; overflow:hidden; }
-  .level-bar{ height:100%; width:0%; background:var(--accent); transition:width .06s linear; }
-  .clear-btn{
-    border:none; background:none; color:var(--danger);
-    font-size:.7rem; font-weight:700; cursor:pointer; padding:6px 4px;
-  }
-
-  .mic-status{ font-size:.7rem; color:var(--muted); min-height:16px; margin:0 0 10px; }
-  .mic-status b{ color:var(--key-tag); }
-
-  .textfield{
-    background:var(--field-bg); border:1.5px solid var(--field-border);
-    border-radius:10px; padding:12px 12px; min-height:64px;
-    font-size:1rem; line-height:1.6; color:#1F1F1F;
-    white-space:pre-wrap; word-break:break-word;
-    flex:1; overflow-y:auto; cursor:text; -webkit-user-select:text; user-select:text;
-  }
-  .textfield .placeholder{ color:#9AA0A6; }
-  .textfield .chr{ white-space:pre; }
-  .textfield .cursor{
-    display:inline-block; width:2px; height:1.1em; background:var(--accent);
-    vertical-align:text-bottom; animation:blink 1s step-end infinite;
-  }
-  @keyframes blink{ 50%{ opacity:0; } }
-
-  .kb-float-wrap{
-    position:fixed;
-    z-index:50;
-  }
-  .kb-float-wrap.docked{
-    left:50%; bottom:0; transform:translateX(-50%);
-    width:100%; max-width:480px;
-    padding-bottom:env(safe-area-inset-bottom, 0px);
+    margin:0 auto;
     background:var(--kb-bg);
+    padding-bottom:env(safe-area-inset-bottom, 0px);
   }
-  .kb-float-wrap.floating{
-    width:300px;
-    border-radius:16px;
-    box-shadow:0 22px 50px rgba(0,0,0,.4);
-    overflow:hidden;
-  }
-  .kb-float-wrap.floating .keyboard{ margin-top:0; border-radius:0 0 16px 16px; }
-  .kb-handle{
-    display:none;
-    align-items:center; justify-content:center;
-    background:#2B2C30; height:20px; cursor:grab; touch-action:none;
-  }
-  .kb-float-wrap.floating .kb-handle{ display:flex; }
-  .kb-handle .dots{ width:36px; height:4px; border-radius:2px; background:#8A8F95; }
-  .kb-handle:active{ cursor:grabbing; }
 
-  .float-toggle{
-    border:none; background:none; color:var(--accent);
-    font-size:.7rem; font-weight:700; cursor:pointer; padding:6px 4px;
+  /* ---- Responsif: layar sangat sempit / lebih lebar (tablet) ---- */
+  @media (max-width:340px){
+    .krow{ gap:3px; margin-bottom:4px; }
+    .key{ padding:7px 0 5px; }
+    .key .ch{ font-size:.9rem; }
+  }
+  @media (min-width:600px){
+    .kb-float-wrap{ max-width:600px; }
+    .key .ch{ font-size:1.15rem; }
   }
 
   .gboard-toolbar{
@@ -299,50 +243,18 @@
   }
   .key .bubble.show, .emoji-btn .bubble.show{ opacity:1; transform:translateX(-50%) translateY(-4px) scale(1); }
 
-  .legend{ margin-top:14px; padding-top:10px; border-top:1px solid #EEE; }
-  .legend summary{ font-size:.75rem; color:var(--accent); cursor:pointer; font-weight:700; }
-  .legend-grid{ display:grid; grid-template-columns:repeat(6,1fr); gap:6px 4px; margin-top:8px; }
-  .legend-item{ text-align:center; font-size:.6rem; color:var(--muted); background:#F8F9FA; border-radius:6px; padding:4px 2px; }
-  .legend-item b{ display:block; font-size:.72rem; color:var(--key-text); }
 
-  footer{ text-align:center; font-size:.62rem; color:#9AA0A6; margin-top:12px; line-height:1.5; }
 </style>
 </head>
 <body>
-<div class="app-shell" id="appShell">
-  <h1>Genjreng Ketik</h1>
-  <p class="sub">Petik satu nada/fret di gitar aslimu — mikrofon mengenali nadanya, dan tuts yang cocok otomatis "ditekan". Semua tuts punya nada sendiri: huruf, angka, spasi, Shift, Backspace (hapus), Enter (kirim), sampai tombol ganti mode.</p>
 
-  <div class="mic-row">
-    <button class="mic-btn" id="micBtn">🎤 Dengarkan Gitar</button>
-    <div class="level-wrap"><div class="level-bar" id="levelBar"></div></div>
-    <button class="clear-btn" id="clearBtn">Hapus</button>
-    <button class="float-toggle" id="floatBtn">🔀 Mengambang</button>
-  </div>
-  <div class="mic-status" id="micStatus">Petik nada satu-satu (bukan kunci penuh) untuk hasil terbaik. Spasi, Shift, Hapus, dan Kirim juga punya nada masing-masing.</div>
-
-  <div class="textfield" id="textfield" tabindex="0"></div>
-
-  <details class="legend">
-    <summary>Lihat pemetaan tuts → nada</summary>
-    <div class="legend-grid" id="legendGrid"></div>
-  </details>
-
-  <footer>
-    Deteksi nada memakai autokorelasi dari mikrofon — paling akurat untuk satu senar dipetik jelas. Jangkauan nada kini E2–B5, mencakup semua tuts termasuk spasi, Shift, Backspace, dan Enter.
-  </footer>
-</div>
-
-<div class="kb-float-wrap docked" id="kbWrap">
-  <div class="kb-handle" id="kbHandle"><span class="dots"></span></div>
+<div class="kb-float-wrap" id="kbWrap">
   <div class="gboard-toolbar" id="gboardToolbar">
-    <button class="gtool-btn" type="button" title="Aplikasi">⊞</button>
     <button class="gtool-btn" id="clipboardBtn" type="button" title="Clipboard">📋</button>
     <button class="gtool-btn" id="oneHandBtn" type="button" title="Mode satu tangan">✋</button>
     <div class="gtool-spacer"></div>
     <button class="gtool-btn" id="settingsBtn" type="button" title="Setelan">⚙</button>
-    <button class="gtool-btn" type="button" title="Terjemahan">あA</button>
-    <button class="gtool-btn mic-tool" id="micToolBtn" type="button" title="Dengarkan gitar">🎤</button>
+    <button class="gtool-btn mic-tool" id="micToolBtn" type="button" title="Dengarkan gitar (otomatis aktif)">🎤</button>
   </div>
   <div class="suggest-bar" id="suggestBar"></div>
   <div class="ime-status" id="imeStatus"></div>
@@ -433,20 +345,8 @@
 
   // ---------------- Keyboard layout: SEMUA tuts (44) responsif nada ----------------
   const keyboardEl = document.getElementById('keyboard');
-  const legendGrid = document.getElementById('legendGrid');
   const keyMap = {};      // char fisik -> element (huruf/angka/koma/spasi/titik)
   const allKeys = [];     // index 0..43 -> element, sejajar dengan NOTES
-
-  function legendLabelFor(def){
-    if(def.type==='letter') return def.char;
-    if(def.type==='literal') return def.big ? 'spasi' : def.char;
-    if(def.type==='shift') return '⇧';
-    if(def.type==='backspace') return '⌫';
-    if(def.type==='enter') return '↵';
-    if(def.type==='emoji-toggle') return '😊';
-    if(def.type==='num-toggle') return '?123';
-    return '?';
-  }
 
   function makeKeyEl(def, note){
     const btn = document.createElement('button');
@@ -505,11 +405,6 @@
       const el = makeKeyEl(def, note);
       row.appendChild(el);
       allKeys[note.idx] = el;
-
-      const li = document.createElement('div');
-      li.className = 'legend-item';
-      li.innerHTML = '<b>'+legendLabelFor(def)+'</b>'+note.name;
-      legendGrid.appendChild(li);
     });
     keyboardEl.appendChild(row);
   }
@@ -520,41 +415,15 @@
   buildRow(KEY_DEFS.slice(29,38), NOTES.slice(29,38));  // Shift + z-m + Backspace
   buildRow(KEY_DEFS.slice(38,44), NOTES.slice(38,44));  // emoji, ?123, , spasi . Enter
 
-  // ---------------- Text field: bisa diketuk untuk pindah kursor, insert/hapus di posisi kursor ----------------
-  const textfieldEl = document.getElementById('textfield');
+  // ---------------- Pelacak teks internal ----------------
+  // Halaman ini sekarang murni tampilan keyboard (tidak ada kotak teks
+  // visual). Variabel `text`/`cursorPos` di bawah TETAP dipertahankan
+  // secara internal (tanpa dirender ke layar) karena masih dipakai untuk
+  // fitur prediksi kata (lihat getCurrentWordRange) dan untuk menghitung
+  // berapa karakter yang perlu dihapus saat kata diganti lewat saran.
   let text = '';
   let cursorPos = 0;
 
-  function makeCursorEl(){
-    const c = document.createElement('span');
-    c.className = 'cursor';
-    return c;
-  }
-  function renderText(){
-    textfieldEl.innerHTML = '';
-    if(text.length===0){
-      const ph = document.createElement('span');
-      ph.className = 'placeholder';
-      ph.textContent = 'Hasil ketikan dari gitar akan muncul di sini…';
-      textfieldEl.appendChild(ph);
-      textfieldEl.appendChild(makeCursorEl());
-      return;
-    }
-    for(let i=0;i<text.length;i++){
-      if(cursorPos===i) textfieldEl.appendChild(makeCursorEl());
-      const ch = text[i];
-      if(ch==='\n'){
-        textfieldEl.appendChild(document.createElement('br'));
-      } else {
-        const span = document.createElement('span');
-        span.className = 'chr';
-        span.dataset.i = i;
-        span.textContent = ch;
-        textfieldEl.appendChild(span);
-      }
-    }
-    if(cursorPos===text.length) textfieldEl.appendChild(makeCursorEl());
-  }
   // ---------------- Jembatan ke Android InputMethodService ----------------
   // Jika halaman ini dimuat di dalam HtmlKeyboardService.java (lewat addJavascriptInterface),
   // window.AndroidKeyboard akan otomatis tersedia dan setiap ketikan diteruskan
@@ -584,7 +453,6 @@
   function appendText(str){
     text = text.slice(0,cursorPos) + str + text.slice(cursorPos);
     cursorPos += str.length;
-    renderText();
     bridgeCommit(str);
     renderSuggestions();
   }
@@ -592,32 +460,17 @@
     if(cursorPos<=0) return;
     text = text.slice(0,cursorPos-1) + text.slice(cursorPos);
     cursorPos -= 1;
-    renderText();
     bridgeDeleteBackward();
     renderSuggestions();
   }
   function pressEnter(){
     // Panggil sendEnter() dulu (bisa memicu tombol Kirim/Cari sesuai kolom aktif),
-    // baru perbarui pratinjau teks lokal secara terpisah agar tidak terkirim dobel.
-    const handled = bridgeEnter();
+    // baru perbarui pelacak teks lokal secara terpisah agar tidak terkirim dobel.
+    bridgeEnter();
     text = text.slice(0,cursorPos) + '\n' + text.slice(cursorPos);
     cursorPos += 1;
-    renderText();
     renderSuggestions();
-    if(!handled){ /* sudah ditangani sebagai newline lokal di atas */ }
   }
-  textfieldEl.addEventListener('click', (e)=>{
-    const span = e.target.closest('.chr');
-    if(span){
-      const i = parseInt(span.dataset.i, 10);
-      const rect = span.getBoundingClientRect();
-      cursorPos = (e.clientX - rect.left) > rect.width/2 ? i+1 : i;
-    } else {
-      cursorPos = text.length;
-    }
-    renderText();
-  });
-  document.getElementById('clearBtn').addEventListener('click', ()=>{ text=''; cursorPos=0; renderText(); });
 
   // ---------------- Bubble + flash ----------------
   function flash(el){ el.classList.add('is-active'); setTimeout(()=> el.classList.remove('is-active'), 80); }
@@ -629,11 +482,9 @@
     setTimeout(()=> bubble.classList.remove('show'), 260);
   }
   function showStatus(msg){
-    document.getElementById('micStatus').innerHTML = msg;
-    // Bagian #appShell (termasuk micStatus di atas) tidak kelihatan saat halaman
-    // ini dijalankan sebagai keyboard sungguhan di Android (WebView keyboard cuma
-    // menampilkan area setinggi #kbWrap). Makanya pesan penting seperti error izin
-    // mikrofon WAJIB juga ditampilkan di sini, di dalam #kbWrap, biar kelihatan.
+    // Halaman ini sekarang murni keyboard, jadi satu-satunya tempat pesan
+    // status (nada terdeteksi, error izin mikrofon, dsb) ditampilkan adalah
+    // pita #imeStatus di dalam #kbWrap.
     const imeStatus = document.getElementById('imeStatus');
     if(!imeStatus) return;
     const isError = /ditolak|tidak tersedia|gagal|error/i.test(msg);
@@ -703,7 +554,6 @@
     const removeCount = word.length;
     text = text.slice(0, start) + chosen + ' ' + text.slice(end);
     cursorPos = start + chosen.length + 1;
-    renderText();
     if(removeCount > 0) bridgeDeleteBackwardN(removeCount);
     bridgeCommit(chosen + ' ');
     renderSuggestions();
@@ -970,8 +820,6 @@
   }
 
   // ---------------- Mic: monophonic pitch detection (autocorrelation) ----------------
-  const micBtn = document.getElementById('micBtn');
-  const levelBar = document.getElementById('levelBar');
   let listening=false, micCtx=null, analyser=null, stream=null, rafId=null;
   let state='idle', sampleAt=0, cooldownUntil=0, smoothedRms=0.001;
 
@@ -1017,7 +865,6 @@
     analyser.getFloatTimeDomainData(buf);
     let sum=0; for(let i=0;i<buf.length;i++) sum+=buf[i]*buf[i];
     const rms = Math.sqrt(sum/buf.length);
-    levelBar.style.width = Math.min(100, rms*400)+'%';
     const now = performance.now();
 
     if(state==='idle'){
@@ -1057,7 +904,12 @@
         audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false }
       });
     }catch(err){
-      showStatus('Izin mikrofon ditolak atau tidak tersedia. Kamu tetap bisa ketuk tuts manual.');
+      // Di dalam keyboard Android asli, permintaan izin ini otomatis
+      // dikabulkan tanpa pop-up (lihat HtmlKeyboardService.java) ASALKAN
+      // izin RECORD_AUDIO sudah diizinkan sekali lewat MainActivity. Kalau
+      // gagal di sini, kemungkinan aplikasi belum pernah dibuka sekali,
+      // atau (saat diuji di browser biasa) pengguna menolak izin mikrofon.
+      showStatus('Izin mikrofon belum aktif. Buka aplikasi Genjreng Ketik sekali untuk mengizinkan mikrofon.');
       return;
     }
     micCtx = new (window.AudioContext||window.webkitAudioContext)();
@@ -1066,8 +918,6 @@
     analyser.fftSize = 4096;
     src.connect(analyser);
     listening = true;
-    micBtn.classList.add('on');
-    micBtn.textContent = '⏹ Berhenti Dengarkan';
     document.getElementById('micToolBtn').classList.add('on');
     showStatus('Mendengarkan… petik satu nada per satu.');
     micLoop();
@@ -1077,13 +927,9 @@
     if(rafId) cancelAnimationFrame(rafId);
     if(stream) stream.getTracks().forEach(t=>t.stop());
     if(micCtx) micCtx.close();
-    micBtn.classList.remove('on');
-    micBtn.textContent='🎤 Dengarkan Gitar';
     document.getElementById('micToolBtn').classList.remove('on');
-    levelBar.style.width='0%';
-    showStatus('Petik nada satu-satu (bukan kunci penuh) untuk hasil terbaik.');
+    showStatus('Mikrofon dijeda. Ketuk ikon mic untuk mendengarkan lagi.');
   }
-  micBtn.addEventListener('click', ()=>{ if(listening) stopMic(); else startMic(); });
   const micToolBtn = document.getElementById('micToolBtn');
   micToolBtn.addEventListener('click', ()=>{ if(listening) stopMic(); else startMic(); });
 
@@ -1095,76 +941,7 @@
     else functionalPress(key);
   });
 
-  // ---------------- Floating keyboard mode (drag anywhere, like Gboard's floating keyboard) ----------------
   const kbWrap = document.getElementById('kbWrap');
-  const kbHandle = document.getElementById('kbHandle');
-  const floatBtn = document.getElementById('floatBtn');
-  let isFloating = false;
-  let dragging = false, offsetX = 0, offsetY = 0;
-
-  floatBtn.addEventListener('click', ()=>{
-    isFloating = !isFloating;
-    if(isFloating){
-      const rect = kbWrap.getBoundingClientRect();
-      kbWrap.classList.remove('docked');
-      kbWrap.classList.add('floating');
-      kbWrap.style.transform = 'none';
-      kbWrap.style.left = Math.max(8, window.innerWidth/2 - 150) + 'px';
-      kbWrap.style.top = Math.max(8, window.innerHeight - rect.height - 90) + 'px';
-      kbWrap.style.bottom = 'auto';
-      floatBtn.textContent = '📌 Tempel ke Bawah';
-    } else {
-      kbWrap.classList.remove('floating');
-      kbWrap.classList.add('docked');
-      kbWrap.style.left = '50%';
-      kbWrap.style.top = 'auto';
-      kbWrap.style.bottom = '0';
-      kbWrap.style.transform = 'translateX(-50%)';
-      floatBtn.textContent = '🔀 Mengambang';
-    }
-    syncShellPadding();
-  });
-
-  kbHandle.addEventListener('pointerdown', (e)=>{
-    if(!isFloating) return;
-    dragging = true;
-    const rect = kbWrap.getBoundingClientRect();
-    offsetX = e.clientX - rect.left;
-    offsetY = e.clientY - rect.top;
-    kbHandle.setPointerCapture(e.pointerId);
-  });
-  kbHandle.addEventListener('pointermove', (e)=>{
-    if(!dragging) return;
-    let x = e.clientX - offsetX;
-    let y = e.clientY - offsetY;
-    const maxX = window.innerWidth - kbWrap.offsetWidth;
-    const maxY = window.innerHeight - kbWrap.offsetHeight;
-    x = Math.max(0, Math.min(maxX, x));
-    y = Math.max(0, Math.min(maxY, y));
-    kbWrap.style.left = x + 'px';
-    kbWrap.style.top = y + 'px';
-  });
-  kbHandle.addEventListener('pointerup', ()=>{ dragging = false; });
-  kbHandle.addEventListener('pointercancel', ()=>{ dragging = false; });
-
-  renderText();
-
-  // ---------------- Jaga agar konten (terutama kotak teks) tidak ketutup keyboard yang mengambang di bawah ----------------
-  const appShell = document.getElementById('appShell');
-  function syncShellPadding(){
-    if(isFloating){
-      appShell.style.paddingBottom = '16px';
-    } else {
-      const h = kbWrap.getBoundingClientRect().height;
-      appShell.style.paddingBottom = (h + 14) + 'px';
-    }
-  }
-  if('ResizeObserver' in window){
-    new ResizeObserver(syncShellPadding).observe(kbWrap);
-  } else {
-    window.addEventListener('resize', syncShellPadding);
-  }
-  syncShellPadding();
 
   if('serviceWorker' in navigator){
     window.addEventListener('load', ()=>{
@@ -1197,7 +974,6 @@
     const willOpen = settingsPanel.style.display !== 'block';
     closeAllPanels();
     if(willOpen){ settingsPanel.style.display = 'block'; keyboardInner.style.display = 'none'; }
-    syncShellPadding();
   });
   clipboardBtn.addEventListener('click', ()=>{
     const willOpen = clipboardPanel.style.display !== 'flex';
@@ -1207,11 +983,19 @@
       clipboardPanel.style.display = 'flex';
       keyboardInner.style.display = 'none';
     }
-    syncShellPadding();
   });
 
-  document.getElementById('oneHandBtn').addEventListener('click', ()=>{ toggleOneHand(); syncShellPadding(); });
+  document.getElementById('oneHandBtn').addEventListener('click', toggleOneHand);
   document.getElementById('oneHandFlip').addEventListener('click', toggleOneHand);
+
+  // ---------------- Mic langsung otomatis mendengarkan, tanpa perlu tombol ----------------
+  // Di keyboard Android asli, izin mikrofon SUDAH dikabulkan sekali lewat
+  // MainActivity saat aplikasi pertama dibuka — jadi getUserMedia() di sini
+  // tidak akan memunculkan pop-up apa pun, dan mic langsung aktif diam-diam
+  // begitu keyboard muncul. (Kalau dibuka di browser biasa untuk uji coba,
+  // browser tetap akan menampilkan pop-up izin sekali, karena itu aturan
+  // keamanan bawaan browser yang tidak bisa dilewati dari sisi halaman web.)
+  startMic();
 })();
 </script>
 </body>
