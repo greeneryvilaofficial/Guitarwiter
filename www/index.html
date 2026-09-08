@@ -254,7 +254,7 @@
     <button class="gtool-btn" id="oneHandBtn" type="button" title="Mode satu tangan">✋</button>
     <div class="gtool-spacer"></div>
     <button class="gtool-btn" id="settingsBtn" type="button" title="Setelan">⚙</button>
-    <button class="gtool-btn mic-tool" id="micToolBtn" type="button" title="Mic dikontrol oleh aplikasi">🎤</button>
+    <button class="gtool-btn mic-tool" id="micToolBtn" type="button" title="Dengarkan gitar (otomatis aktif)">🎤</button>
   </div>
   <div class="suggest-bar" id="suggestBar"></div>
   <div class="ime-status" id="imeStatus"></div>
@@ -416,10 +416,20 @@
   buildRow(KEY_DEFS.slice(38,44), NOTES.slice(38,44));  // emoji, ?123, , spasi . Enter
 
   // ---------------- Pelacak teks internal ----------------
+  // Halaman ini sekarang murni tampilan keyboard (tidak ada kotak teks
+  // visual). Variabel `text`/`cursorPos` di bawah TETAP dipertahankan
+  // secara internal (tanpa dirender ke layar) karena masih dipakai untuk
+  // fitur prediksi kata (lihat getCurrentWordRange) dan untuk menghitung
+  // berapa karakter yang perlu dihapus saat kata diganti lewat saran.
   let text = '';
   let cursorPos = 0;
 
   // ---------------- Jembatan ke Android InputMethodService ----------------
+  // Jika halaman ini dimuat di dalam HtmlKeyboardService.java (lewat addJavascriptInterface),
+  // window.AndroidKeyboard akan otomatis tersedia dan setiap ketikan diteruskan
+  // ke InputConnection kolom teks yang sedang aktif (WhatsApp, Instagram, dll).
+  // Kalau dibuka di browser biasa untuk uji coba, bridge ini tidak ada sehingga
+  // keyboard tetap berfungsi normal memakai kotak teks internal di atas.
   function hasAndroidBridge(){
     return !!(window.AndroidKeyboard && window.AndroidKeyboard.commitText);
   }
@@ -454,6 +464,8 @@
     renderSuggestions();
   }
   function pressEnter(){
+    // Panggil sendEnter() dulu (bisa memicu tombol Kirim/Cari sesuai kolom aktif),
+    // baru perbarui pelacak teks lokal secara terpisah agar tidak terkirim dobel.
     bridgeEnter();
     text = text.slice(0,cursorPos) + '\n' + text.slice(cursorPos);
     cursorPos += 1;
@@ -470,21 +482,25 @@
     setTimeout(()=> bubble.classList.remove('show'), 260);
   }
   function showStatus(msg){
+    // Halaman ini sekarang murni keyboard, jadi satu-satunya tempat pesan
+    // status (nada terdeteksi, error izin mikrofon, dsb) ditampilkan adalah
+    // pita #imeStatus di dalam #kbWrap.
     const imeStatus = document.getElementById('imeStatus');
     if(!imeStatus) return;
     const isError = /ditolak|tidak tersedia|gagal|error/i.test(msg);
-    imeStatus.innerHTML = msg;
+    imeStatus.textContent = msg.replace(/<[^>]*>/g, '');
     imeStatus.classList.add('show');
     imeStatus.classList.toggle('ok', !isError);
     clearTimeout(imeStatus._hideTimer);
     imeStatus._hideTimer = setTimeout(()=> imeStatus.classList.remove('show'), 4000);
   }
 
-  // ---------------- Bridge tambahan: hapus beberapa karakter ----------------
+  // ---------------- Bridge tambahan: hapus beberapa karakter sekaligus (dipakai saat ganti kata via prediksi) ----------------
   function bridgeDeleteBackwardN(n){
     if(window.AndroidKeyboard && window.AndroidKeyboard.deleteBackwardN){
       try{ window.AndroidKeyboard.deleteBackwardN(n); return; }catch(e){}
     }
+    // Fallback kalau bridge lama belum punya deleteBackwardN: panggil deleteBackward berkali-kali.
     for(let i=0;i<n;i++) bridgeDeleteBackward();
   }
 
@@ -518,6 +534,7 @@
     if(word.length > 0){
       const lower = word.toLowerCase();
       candidates = DICTIONARY.filter(w => w.startsWith(lower)).slice(0,3);
+      // Tombol pertama selalu kata yang sedang diketik apa adanya, biar bisa "diterima" langsung.
       candidates = [word, ...candidates.filter(c => c.toLowerCase() !== lower)].slice(0,3);
     } else {
       candidates = ['Halo', 'Terima kasih', 'Oke'];
@@ -571,6 +588,7 @@
       panel.appendChild(btn);
     });
   }
+  // Dipanggil dari sisi Java (HtmlKeyboardService) setiap kali clipboard sistem Android berubah.
   window.onClipboardChanged = function(newText){
     if(!newText) return;
     clipboardHistory = clipboardHistory.filter(t => t !== newText);
@@ -607,7 +625,7 @@
     }
   }
 
-  // ---------------- Keyboard modes ----------------
+  // ---------------- Keyboard modes: letters / symbols / emoji, plus Shift state ----------------
   let mode = 'letters';
   let shiftActive = false;
   let capsLock = false;
@@ -661,11 +679,12 @@
         const base = el.dataset.origChar;
         chSpan.textContent = shiftActive ? base.toUpperCase() : base;
       }
+      // note name + fret label stay visible in every mode
     });
   }
 
   const EMOJIS = ['😀','😂','🥰','😎','🤔','😢','😡','👍','👎','👏','🙏','🔥','🎸','🎵','🎶','🎤','❤️','✨','🎉','💯','⭐','☀️','🌙','⚡','🍕','☕','🚀','✅','❌','😴','🥳','🤩','💜','🌈','🎂','🙌','😉','🥲','😇','🤗','🙃','😅','👋','🎈'];
-  const emojiKeys = [];
+  const emojiKeys = []; // index-aligned with NOTES (0..35), so mic detection works in emoji mode too
   NOTES.forEach((note, idx)=>{
     const emo = EMOJIS[idx] || '❔';
     const b = document.createElement('button');
@@ -685,6 +704,10 @@
     emojiKeys.push(b);
   });
 
+  // Tombol "kembali ke huruf" khusus di dalam panel emoji.
+  // Ini perlu ditaruh di sini (bukan cuma di dalam #keyboard) karena
+  // #keyboard disembunyikan total saat mode emoji aktif, jadi tombol
+  // toggle yang lama ikut hilang dan tidak bisa dipakai untuk kembali.
   const emojiBackBtn = document.createElement('button');
   emojiBackBtn.type = 'button';
   emojiBackBtn.className = 'emoji-btn emoji-back-btn';
@@ -692,6 +715,8 @@
   emojiBackBtn.addEventListener('pointerdown', () => { setMode('letters'); });
   emojiPanelEl.insertBefore(emojiBackBtn, emojiPanelEl.firstChild);
 
+  // Tombol hapus juga ditaruh di dalam panel emoji dengan alasan yang sama:
+  // supaya tidak perlu kembali ke huruf dulu hanya untuk menghapus.
   const emojiDeleteBtn = document.createElement('button');
   emojiDeleteBtn.type = 'button';
   emojiDeleteBtn.className = 'emoji-btn emoji-back-btn';
@@ -707,15 +732,15 @@
     numBtnEl.textContent = (mode==='symbols') ? 'ABC' : '?123';
     emojiBtnEl.querySelector('.ch').textContent = (mode==='emoji') ? '🔤' : '😊';
     if(mode==='symbols'){
-      showStatus('Mode simbol aktif — petik nada untuk mengetik tanda baca.');
+      showStatus(listening ? 'Mode simbol aktif — petik nada untuk mengetik tanda baca.' : 'Mode simbol aktif — lihat nada di bawah tiap tanda baca.');
     } else if(mode==='emoji'){
-      showStatus('Mode emoji aktif — petik nada untuk mengetik emoji.');
+      showStatus(listening ? 'Mode emoji aktif — petik nada untuk mengetik emoji.' : 'Mode emoji aktif — lihat nada di bawah tiap emoji.');
     } else {
-      showStatus('Mendengarkan sistem Android... petik satu nada per satu.');
+      showStatus(listening ? 'Mendengarkan… petik satu nada per satu.' : 'Petik nada satu-satu (bukan kunci penuh) untuk hasil terbaik.');
     }
   }
 
-  // ---------------- Key actions ----------------
+  // ---------------- Key actions (silent — no internal synthesized audio) ----------------
   function manualPress(el){
     flash(el);
     let ch;
@@ -794,23 +819,170 @@
     return null;
   }
 
-  // ---------------- Bridge Eksternal dari Java Native ----------------
-  window.triggerNoteFromJava = function(midiNote) {
-    const idx = Math.round(midiNote) - BASE_MIDI;
-    
-    if (idx >= 0 && idx < NOTE_COUNT) {
-      const typed = autoTypeNote(idx);
-      if (typed !== null) {
-        const noteName = NOTES[idx].name;
-        const label = (typed === ' ') ? '␣' : (typed === '\n' ? '↵' : typed);
-        showStatus('Nada <b>' + noteName + '</b> (via Native) → <b>"' + label + '"</b>');
-      }
-    } else {
-      showStatus('Nada di luar jangkauan ' + NOTES[0].name + '–' + NOTES[NOTE_COUNT - 1].name);
+  // ---------------- Mic: jalur NATIVE (AudioRecord Java), PRIORITAS UTAMA ----------------
+  // getUserMedia() di WebView gagal terus di sebagian HP (NotAllowedError) meski izin
+  // sistem sudah "Diizinkan" -- kemungkinan pembatasan WebView/OEM yang di luar jangkauan
+  // kode web. Kalau window.AndroidKeyboard.startNativeMic tersedia (artinya berjalan di
+  // dalam APK asli), pakai jalur ini: rekam + deteksi nada dilakukan di kode Java native
+  // (lihat NativeMicPitchDetector.java), hasilnya langsung dikirim ke sini secara instan.
+  function hasNativeMicBridge(){
+    return !!(window.AndroidKeyboard && window.AndroidKeyboard.startNativeMic);
+  }
+
+  window.onNativeMicStatus = function(kind, ok){
+    if(kind === 'permission' && !ok){
+      showStatus('❌ Izin mikrofon belum aktif. Buka aplikasi Genjreng Ketik dari app drawer sekali, izinkan mikrofonnya, lalu coba lagi.');
+      listening = false;
+      micToolBtn.classList.remove('on');
+      return;
+    }
+    if(kind === 'listening'){
+      showStatus('🎙️ Mendengarkan… petik satu nada.');
+    } else if(kind === 'onset'){
+      showStatus('Mendengar petikan…');
     }
   };
+  window.onNativePitchIndex = function(idx, freq){
+    if(idx>=0 && idx<NOTE_COUNT){
+      const typed = autoTypeNote(idx);
+      const noteName = NOTES[idx].name;
+      const label = (typed===' ') ? '␣' : (typed==='\n' ? '↵' : typed);
+      showStatus('Nada <b>'+noteName+'</b> ('+Math.round(freq)+' Hz) → <b>"'+label+'"</b>');
+    }
+  };
+  window.onNativeOutOfRange = function(freq){
+    showStatus('Nada di luar jangkauan '+NOTES[0].name+'–'+NOTES[NOTE_COUNT-1].name+' ('+Math.round(freq)+' Hz).');
+  };
+  window.onNativeUnclear = function(){
+    showStatus('Nada belum terdeteksi jelas, coba petik lagi.');
+  };
 
-  // Keyboard fisik support
+  // ---------------- Mic: monophonic pitch detection (autocorrelation) ----------------
+  let listening=false, micCtx=null, analyser=null, stream=null, rafId=null;
+  let state='idle', sampleAt=0, cooldownUntil=0, smoothedRms=0.001;
+
+  function autoCorrelate(buf, sampleRate){
+    const SIZE = buf.length;
+    let rms=0;
+    for(let i=0;i<SIZE;i++) rms += buf[i]*buf[i];
+    rms = Math.sqrt(rms/SIZE);
+    if(rms < 0.012) return -1;
+
+    let r1=0, r2=SIZE-1;
+    const thres=0.2;
+    for(let i=0;i<SIZE/2;i++){ if(Math.abs(buf[i])<thres){ r1=i; break; } }
+    for(let i=1;i<SIZE/2;i++){ if(Math.abs(buf[SIZE-i])<thres){ r2=SIZE-i; break; } }
+    const trimmed = buf.slice(r1, r2);
+    const n = trimmed.length;
+    if(n < 8) return -1;
+
+    const c = new Float32Array(n);
+    for(let lag=0; lag<n; lag++){
+      let sum=0;
+      for(let i=0; i<n-lag; i++) sum += trimmed[i]*trimmed[i+lag];
+      c[lag]=sum;
+    }
+    let d=0;
+    while(d<n-1 && c[d]>c[d+1]) d++;
+    let maxVal=-1, maxPos=-1;
+    for(let i=d;i<n;i++){
+      if(c[i]>maxVal){ maxVal=c[i]; maxPos=i; }
+    }
+    if(maxPos<=0) return -1;
+    let T0 = maxPos;
+    const x1=c[T0-1]||0, x2=c[T0], x3=(T0+1<n)?c[T0+1]:0;
+    const a=(x1+x3-2*x2)/2, b=(x3-x1)/2;
+    if(a) T0 = T0 - b/(2*a);
+    if(T0<=0) return -1;
+    return sampleRate/T0;
+  }
+
+  function micLoop(){
+    if(!listening) return;
+    const buf = new Float32Array(analyser.fftSize);
+    analyser.getFloatTimeDomainData(buf);
+    let sum=0; for(let i=0;i<buf.length;i++) sum+=buf[i]*buf[i];
+    const rms = Math.sqrt(sum/buf.length);
+    const now = performance.now();
+
+    if(state==='idle'){
+      if(rms>0.02 && rms>smoothedRms*1.6 && now>cooldownUntil){
+        state='sampling';
+        sampleAt = now + 45;
+        showStatus('Mendengar petikan…');
+      }
+    } else if(state==='sampling'){
+      if(now>=sampleAt){
+        const freq = autoCorrelate(buf, micCtx.sampleRate);
+        if(freq>0){
+          const midi = 69 + 12*Math.log2(freq/440);
+          const idx = Math.round(midi) - BASE_MIDI;
+          if(idx>=0 && idx<NOTE_COUNT){
+            const typed = autoTypeNote(idx);
+            const noteName = NOTES[idx].name;
+            const label = (typed===' ') ? '␣' : (typed==='\n' ? '↵' : typed);
+            showStatus('Nada <b>'+noteName+'</b> ('+freq.toFixed(0)+' Hz) → <b>"'+label+'"</b>');
+          } else {
+            showStatus('Nada di luar jangkauan '+NOTES[0].name+'–'+NOTES[NOTE_COUNT-1].name+' ('+freq.toFixed(0)+' Hz).');
+          }
+        } else {
+          showStatus('Nada belum terdeteksi jelas, coba petik lagi.');
+        }
+        state='idle';
+        cooldownUntil = now + 260;
+      }
+    }
+    smoothedRms = smoothedRms*0.85 + rms*0.15;
+    rafId = requestAnimationFrame(micLoop);
+  }
+
+  async function startMic(){
+    if(hasNativeMicBridge()){
+      const ok = window.AndroidKeyboard.startNativeMic();
+      if(ok){
+        listening = true;
+        micToolBtn.classList.add('on');
+      }
+      return;
+    }
+
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      showStatus('❌ navigator.mediaDevices tidak tersedia. Kamu tetap bisa ketuk tuts manual.');
+      return;
+    }
+    try{
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false }
+      });
+    }catch(err){
+      const detail = (err && err.name) ? (err.name + (err.message ? ': ' + err.message : '')) : String(err);
+      showStatus('❌ Gagal akses mikrofon → ' + detail + '. Kamu tetap bisa ketuk tuts manual.');
+      return;
+    }
+    micCtx = new (window.AudioContext||window.webkitAudioContext)();
+    const src = micCtx.createMediaStreamSource(stream);
+    analyser = micCtx.createAnalyser();
+    analyser.fftSize = 4096;
+    src.connect(analyser);
+    listening = true;
+    document.getElementById('micToolBtn').classList.add('on');
+    showStatus('Mendengarkan… petik satu nada per satu.');
+    micLoop();
+  }
+  function stopMic(){
+    listening=false;
+    if(hasNativeMicBridge()){
+      window.AndroidKeyboard.stopNativeMic();
+    }
+    if(rafId) cancelAnimationFrame(rafId);
+    if(stream) stream.getTracks().forEach(t=>t.stop());
+    if(micCtx) micCtx.close();
+    document.getElementById('micToolBtn').classList.remove('on');
+    showStatus('Mikrofon dijeda. Ketuk ikon mic untuk mendengarkan lagi.');
+  }
+  const micToolBtn = document.getElementById('micToolBtn');
+  micToolBtn.addEventListener('click', ()=>{ if(listening) stopMic(); else startMic(); });
+
   window.addEventListener('keydown', (e)=>{
     const key = keyMap[e.key.toLowerCase()];
     if(!key) return;
@@ -819,13 +991,15 @@
     else functionalPress(key);
   });
 
+  const kbWrap = document.getElementById('kbWrap');
+
   if('serviceWorker' in navigator){
     window.addEventListener('load', ()=>{
       navigator.serviceWorker.register('sw.js').catch(()=>{});
     });
   }
 
-  // ---------------- Inisialisasi & wiring UI ----------------
+  // ---------------- Inisialisasi & wiring fitur baru ----------------
   loadSavedTheme();
   renderSuggestions();
   renderClipboardPanel();
@@ -864,8 +1038,14 @@
   document.getElementById('oneHandBtn').addEventListener('click', toggleOneHand);
   document.getElementById('oneHandFlip').addEventListener('click', toggleOneHand);
 
-  // Status awal (karena mic web dimatikan)
-  showStatus('Menunggu deteksi nada dari sistem Android...');
+  // ---------------- Mic langsung otomatis mendengarkan, tanpa perlu tombol ----------------
+  // Di keyboard Android asli, izin mikrofon SUDAH dikabulkan sekali lewat
+  // MainActivity saat aplikasi pertama dibuka — jadi getUserMedia() di sini
+  // tidak akan memunculkan pop-up apa pun, dan mic langsung aktif diam-diam
+  // begitu keyboard muncul. (Kalau dibuka di browser biasa untuk uji coba,
+  // browser tetap akan menampilkan pop-up izin sekali, karena itu aturan
+  // keamanan bawaan browser yang tidak bisa dilewati dari sisi halaman web.)
+  startMic();
 })();
 </script>
 </body>
