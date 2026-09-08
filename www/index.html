@@ -240,6 +240,12 @@
   }
   .suggest-chip:active{ background:rgba(255,255,255,.1); }
   .suggest-chip.is-word{ font-weight:700; }
+  .ime-status{
+    display:none; padding:6px 10px; font-size:.78rem; text-align:center;
+    background:#B3261E; color:#FFFFFF; font-family:'Roboto', sans-serif;
+  }
+  .ime-status.show{ display:block; }
+  .ime-status.ok{ background:#1F6B47; }
 
   /* ---- Panel Settings (tema) ---- */
   .settings-panel{
@@ -339,6 +345,7 @@
     <button class="gtool-btn mic-tool" id="micToolBtn" type="button" title="Dengarkan gitar">🎤</button>
   </div>
   <div class="suggest-bar" id="suggestBar"></div>
+  <div class="ime-status" id="imeStatus"></div>
   <div class="settings-panel" id="settingsPanel">
     <h4>Pilih Tema Warna</h4>
     <div class="theme-swatches" id="themeSwatches">
@@ -621,7 +628,21 @@
     bubble.classList.add('show');
     setTimeout(()=> bubble.classList.remove('show'), 260);
   }
-  function showStatus(msg){ document.getElementById('micStatus').innerHTML = msg; }
+  function showStatus(msg){
+    document.getElementById('micStatus').innerHTML = msg;
+    // Bagian #appShell (termasuk micStatus di atas) tidak kelihatan saat halaman
+    // ini dijalankan sebagai keyboard sungguhan di Android (WebView keyboard cuma
+    // menampilkan area setinggi #kbWrap). Makanya pesan penting seperti error izin
+    // mikrofon WAJIB juga ditampilkan di sini, di dalam #kbWrap, biar kelihatan.
+    const imeStatus = document.getElementById('imeStatus');
+    if(!imeStatus) return;
+    const isError = /ditolak|tidak tersedia|gagal|error/i.test(msg);
+    imeStatus.textContent = msg.replace(/<[^>]*>/g, '');
+    imeStatus.classList.add('show');
+    imeStatus.classList.toggle('ok', !isError);
+    clearTimeout(imeStatus._hideTimer);
+    imeStatus._hideTimer = setTimeout(()=> imeStatus.classList.remove('show'), 4000);
+  }
 
   // ---------------- Bridge tambahan: hapus beberapa karakter sekaligus (dipakai saat ganti kata via prediksi) ----------------
   function bridgeDeleteBackwardN(n){
