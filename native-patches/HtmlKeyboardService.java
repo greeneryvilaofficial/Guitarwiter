@@ -11,9 +11,12 @@ import android.view.inputmethod.InputMethodManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
+import androidx.webkit.WebViewAssetLoader;
+import androidx.webkit.WebViewClientCompat;
 import android.webkit.WebView;
-import android.webkit.WebViewClient;
 
 /**
  * InputMethodService yang menampilkan file HTML keyboard sebagai WebView,
@@ -23,6 +26,7 @@ import android.webkit.WebViewClient;
 public class HtmlKeyboardService extends InputMethodService {
 
     private WebView webView;
+    private WebViewAssetLoader assetLoader;
     private ClipboardManager clipboardManager;
     private final ClipboardManager.OnPrimaryClipChangedListener clipListener = this::pushClipboardToJs;
 
@@ -67,6 +71,22 @@ public class HtmlKeyboardService extends InputMethodService {
             clipboardManager.addPrimaryClipChangedListener(clipListener);
         }
 
+        // PENTING: getUserMedia (dipakai fitur deteksi nada gitar) DIBLOKIR browser/WebView
+        // kalau halaman dimuat lewat file:// langsung -- itu dianggap "origin tidak aman",
+        // apa pun izin Android-nya. WebViewAssetLoader ini bikin WebView memuat file yang
+        // SAMA PERSIS dari folder assets, tapi lewat alamat https://appassets.androidplatform.net/...
+        // yang dianggap origin aman, sehingga getUserMedia bisa benar-benar diizinkan.
+        assetLoader = new WebViewAssetLoader.Builder()
+                .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
+                .build();
+
+        webView.setWebViewClient(new WebViewClientCompat() {
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                return assetLoader.shouldInterceptRequest(request.getUrl());
+            }
+        });
+
         // Fitur mikrofon (deteksi nada gitar): JS memanggil getUserMedia({audio:true}),
         // dan WebView butuh persetujuan lewat onPermissionRequest ini. Diberikan otomatis
         // KALAU izin RECORD_AUDIO di level sistem Android sudah diizinkan lewat MainActivity
@@ -87,10 +107,10 @@ public class HtmlKeyboardService extends InputMethodService {
             }
         });
 
-        // Memuat file HTML dari aset lokal Capacitor
-        webView.loadUrl("file:///android_asset/public/index.html");
+        // Memuat file HTML lewat WebViewAssetLoader (BUKAN file:// lagi), supaya origin-nya
+        // dianggap aman dan getUserMedia bisa berfungsi.
+        webView.loadUrl("https://appassets.androidplatform.net/assets/public/index.html");
 
-        webView.setWebViewClient(new WebViewClient());
         return webView;
     }
 
