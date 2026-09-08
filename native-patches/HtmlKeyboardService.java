@@ -95,15 +95,19 @@ public class HtmlKeyboardService extends InputMethodService {
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public void onPermissionRequest(final PermissionRequest request) {
-                runOnUiThreadSafe(() -> {
-                    for (String resource : request.getResources()) {
-                        if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource)) {
-                            request.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
-                            return;
-                        }
+                // PENTING: onPermissionRequest ini SUDAH berjalan di UI thread bawaan
+                // Android. Sebelumnya kode ini membungkus grant() dengan webView.post(),
+                // yang menunda eksekusinya ke antrian berikutnya -- di sebagian WebView
+                // (termasuk yang dipakai beberapa HP ColorOS), penundaan ini bisa bikin
+                // permintaan izin keburu dianggap gagal sebelum grant() sempat jalan,
+                // persis menghasilkan error NotAllowedError. Sekarang dipanggil langsung.
+                for (String resource : request.getResources()) {
+                    if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource)) {
+                        request.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
+                        return;
                     }
-                    request.deny();
-                });
+                }
+                request.deny();
             }
         });
 
