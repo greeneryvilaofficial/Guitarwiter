@@ -64,6 +64,15 @@ jobs:
       - name: Debug - cek panjang string KEYSTORE_BASE64
         run: echo "Panjang KEYSTORE_BASE64 adalah ${#KEYSTORE_BASE64} karakter"
 
+      - name: Debug - cek isi variables.gradle
+        run: cat android/variables.gradle || echo "File variables.gradle TIDAK DITEMUKAN"
+
+      - name: Debug - cek isi build.gradle level project
+        run: cat android/build.gradle || echo "File build.gradle level project TIDAK DITEMUKAN"
+
+      - name: Debug - cek isi app/build.gradle SEBELUM signing config
+        run: cat android/app/build.gradle
+
       - name: Decode keystore dari secret (kalau ada)
         if: env.KEYSTORE_BASE64 != ''
         run: |
