@@ -107,36 +107,49 @@
   }
 
   .gboard-toolbar{
-    display:flex; align-items:center; justify-content:space-between;
-    padding:8px 10px 2px; gap:4px;
+    display:flex; align-items:center; justify-content:flex-start;
+    padding:6px 6px; gap:2px; min-height:40px;
+    overflow-x:auto; scrollbar-width:none; -ms-overflow-style:none;
   }
+  .gboard-toolbar::-webkit-scrollbar{ display:none; }
   .gtool-btn{
-    border:none; background:none; color:#9AA0A6; font-size:1.05rem;
-    width:34px; height:34px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    border:none; background:none; color:#9AA0A6; font-size:1.2rem;
+    width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center;
     cursor:pointer; -webkit-tap-highlight-color:transparent; flex:0 0 auto;
+    transition:background .1s ease;
   }
-  .gtool-btn:active{ background:rgba(255,255,255,.08); }
+  .gtool-btn:active{ background:rgba(255,255,255,.12); }
+  .gtool-btn#gifBtn, .gtool-btn#translateBtn{
+    width:auto; min-width:40px; padding:0 10px; font-size:.7rem; font-weight:700;
+    letter-spacing:.02em; border-radius:16px; background:rgba(255,255,255,.06);
+  }
+  .gtool-btn.tool-active{ color:var(--key-tag); background:rgba(124,231,196,.14); }
   .gtool-btn.mic-tool{ color:#8AB4F8; }
   .gtool-btn.mic-tool.on{ color:#F28B82; }
   .gtool-spacer{ flex:1; }
 
   .keyboard{ background:var(--kb-bg); border-radius:14px 14px 0 0; margin-top:0; padding:4px 4px 6px; }
-  .krow{ display:flex; gap:5px; justify-content:center; margin-bottom:5px; }
+  .krow{ display:flex; gap:4px; justify-content:center; margin-bottom:6px; }
   .krow:last-child{ margin-bottom:0; }
+  /* Offset tiap baris dikit-dikit biar diamond-shape kayak QWERTY fisik/Gboard asli */
+  .krow:nth-child(2){ padding:0 1.6%; }
+  .krow:nth-child(3){ padding:0 4.4%; }
+  .krow:nth-child(4){ padding:0 0; }
 
   .key{
-    position:relative; flex:1; background:var(--key-bg); border:none; border-radius:6px;
-    padding:9px 0 6px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    position:relative; flex:1; min-width:0; background:var(--key-bg); border:none; border-radius:6px;
+    padding:11px 0 8px; display:flex; flex-direction:column; align-items:center; justify-content:center;
     box-shadow:0 1.5px 0 var(--shadow); font-family:'Roboto', sans-serif;
     cursor:pointer; user-select:none; -webkit-tap-highlight-color:transparent;
+    min-height:42px;
   }
-  .key .ch{ font-size:1rem; font-weight:400; color:var(--key-text); line-height:1; }
-  .key .tag{ font-size:.48rem; font-weight:700; color:var(--key-tag); margin-top:2px; }
+  .key .ch{ font-size:1.05rem; font-weight:400; color:var(--key-text); line-height:1; }
+  .key .tag{ font-size:.48rem; font-weight:700; color:var(--key-tag); margin-top:3px; }
   .key.fn{ background:var(--key-fn-bg); flex:1.3; }
   .key.fn .ch{ font-size:.85rem; color:#C6C9CD; }
-  .key.fn.key-shift{ flex:1.9; }
-  .key.fn.key-shift .ch{ font-size:1.05rem; }
-  .key.space{ flex:7; padding-top:12px; padding-bottom:9px; }
+  .key.fn.key-shift{ flex:1.5; }
+  .key.fn.key-shift .ch{ font-size:1.15rem; }
+  .key.space{ flex:5.2; padding-top:14px; padding-bottom:11px; }
   .key.space .ch{ font-size:.66rem; color:#C6C9CD; font-weight:500; letter-spacing:.04em; }
   .key.is-active{ background:var(--key-active-bg); }
   .key.fn.is-active{ background:var(--key-fn-active-bg); }
@@ -243,6 +256,63 @@
   }
   .key .bubble.show, .emoji-btn .bubble.show{ opacity:1; transform:translateX(-50%) translateY(-4px) scale(1); }
 
+  /* ---- Panel GIF (placeholder stiker — lihat catatan di JS soal integrasi Tenor asli) ---- */
+  .gif-panel{
+    display:none; flex-wrap:wrap; gap:6px; padding:10px 8px;
+    background:var(--kb-bg); max-height:230px; overflow-y:auto;
+  }
+  .gif-item{
+    flex:0 0 calc(33.333% - 4px); aspect-ratio:1.3/1; border:none; border-radius:10px;
+    background:var(--key-bg); color:var(--key-text); display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:2px; font-size:1.6rem;
+    box-shadow:0 1.5px 0 var(--shadow); cursor:pointer; -webkit-tap-highlight-color:transparent;
+  }
+  .gif-item .gif-label{ font-size:.55rem; font-weight:700; color:var(--muted); }
+  .gif-item:active{ background:var(--key-active-bg); }
+
+  /* ---- Panel Mode Terjemah ---- */
+  .translate-panel{
+    display:none; flex-direction:column; gap:8px; padding:10px 10px 12px;
+    background:var(--kb-bg); color:var(--key-text); font-family:'Roboto', sans-serif;
+  }
+  .translate-bar{ display:flex; align-items:center; gap:8px; }
+  .translate-lang{
+    flex:1; background:var(--key-bg); color:var(--key-text); border:none; border-radius:8px;
+    padding:8px 6px; font-family:inherit; font-size:.82rem;
+  }
+  .translate-swap{
+    flex:0 0 auto; width:34px; height:34px; border-radius:50%; border:none;
+    background:var(--key-fn-bg); color:var(--key-text); font-size:1rem;
+  }
+  .translate-preview{
+    background:var(--key-bg); border-radius:8px; padding:10px; font-size:.9rem;
+    min-height:44px; color:var(--key-text); line-height:1.35;
+  }
+  .translate-insert{
+    background:var(--key-enter-bg); color:#062B22; border:none; border-radius:8px;
+    padding:9px; font-weight:700; font-size:.85rem; font-family:inherit;
+  }
+  .translate-note{ font-size:.66rem; color:var(--muted); line-height:1.4; }
+
+  /* ---- Badge angka pojok di baris q-p (mirip hint long-press angka di Gboard) ---- */
+  .key .corner-num{
+    position:absolute; top:2px; right:3px; font-size:.42rem; font-weight:700;
+    color:var(--muted); opacity:.85; line-height:1;
+  }
+
+  /* ---- Clipboard: tombol hapus per item + hapus semua ---- */
+  .clipboard-toolbar{ display:flex; justify-content:flex-end; padding:0 4px 4px; }
+  .clipboard-clear{
+    background:none; border:none; color:var(--muted); font-size:.72rem; font-weight:700;
+    padding:4px 6px; cursor:pointer;
+  }
+  .clipboard-item-row{ display:flex; align-items:stretch; gap:4px; }
+  .clipboard-item-row .clipboard-item{ flex:1; }
+  .clipboard-item-del{
+    flex:0 0 34px; background:var(--key-fn-bg); color:var(--muted); border:none;
+    border-radius:8px; font-size:.85rem; cursor:pointer;
+  }
+
 
 </style>
 </head>
@@ -251,6 +321,8 @@
 <div class="kb-float-wrap" id="kbWrap">
   <div class="gboard-toolbar" id="gboardToolbar">
     <button class="gtool-btn" id="clipboardBtn" type="button" title="Clipboard">📋</button>
+    <button class="gtool-btn" id="gifBtn" type="button" title="GIF">GIF</button>
+    <button class="gtool-btn" id="translateBtn" type="button" title="Terjemahkan">文A</button>
     <button class="gtool-btn" id="oneHandBtn" type="button" title="Mode satu tangan">✋</button>
     <div class="gtool-spacer"></div>
     <button class="gtool-btn" id="settingsBtn" type="button" title="Setelan">⚙</button>
@@ -269,6 +341,23 @@
     </div>
   </div>
   <div class="clipboard-panel" id="clipboardPanel"></div>
+  <div class="gif-panel" id="gifPanel"></div>
+  <div class="translate-panel" id="translatePanel">
+    <div class="translate-bar">
+      <select class="translate-lang" id="translateFrom">
+        <option value="id">Indonesia</option>
+        <option value="en">Inggris</option>
+      </select>
+      <button class="translate-swap" id="translateSwap" type="button" title="Tukar bahasa">⇄</button>
+      <select class="translate-lang" id="translateTo">
+        <option value="en">Inggris</option>
+        <option value="id">Indonesia</option>
+      </select>
+    </div>
+    <div class="translate-preview" id="translatePreview">Ketik pakai tuts di bawah, hasil terjemahan muncul di sini…</div>
+    <button class="translate-insert" id="translateInsert" type="button">Sisipkan terjemahan ⏎</button>
+    <div class="translate-note">Kamus bawaan terbatas (offline, kata per kata). Untuk hasil akurat penuh, sambungkan API terjemahan (mis. Google Cloud Translation) lewat jembatan Android.</div>
+  </div>
   <div class="keyboard-inner" id="keyboardInner">
     <div class="keyboard" id="keyboard"></div>
     <div class="emoji-panel" id="emojiPanel"></div>
@@ -288,13 +377,13 @@
   // [Shift] + baris z-m + [Backspace], lalu baris bawah [emoji][?123][,][spasi][.][Enter]
   const KEY_DEFS = [
     ...['1','2','3','4','5','6','7','8','9','0'].map(ch=>({type:'letter', char:ch})),
-    ...['q','w','e','r','t','y','u','i','o','p'].map(ch=>({type:'letter', char:ch})),
+    ...['q','w','e','r','t','y','u','i','o','p'].map((ch,i)=>({type:'letter', char:ch, cornerNum:(i+1)%10})),
     ...['a','s','d','f','g','h','j','k','l'].map(ch=>({type:'letter', char:ch})),
     {type:'shift'},
     ...['z','x','c','v','b','n','m'].map(ch=>({type:'letter', char:ch})),
     {type:'backspace'},
-    {type:'emoji-toggle'},
     {type:'num-toggle'},
+    {type:'emoji-toggle'},
     {type:'literal', char:',', label:','},
     {type:'literal', char:' ', label:'spasi', big:true},
     {type:'literal', char:'.', label:'.'},
@@ -360,7 +449,8 @@
       btn.className='key';
       btn.dataset.type='note';
       btn.dataset.origChar = def.char;
-      btn.innerHTML = '<span class="ch">'+def.char+'</span><span class="tag">'+note.name+'</span><span class="bubble"></span>';
+      const cornerBadge = (def.cornerNum!==undefined) ? '<span class="corner-num">'+def.cornerNum+'</span>' : '';
+      btn.innerHTML = '<span class="ch">'+def.char+'</span><span class="tag">'+note.name+'</span>'+cornerBadge+'<span class="bubble"></span>';
       btn.addEventListener('pointerdown', ()=> manualPress(btn));
       keyMap[def.char] = btn;
     } else if(def.type==='shift'){
@@ -368,11 +458,13 @@
       btn.id='shiftBtn';
       btn.innerHTML='<span class="ch">⇧</span><span class="tag">'+note.name+'</span><span class="bubble"></span>';
       btn.addEventListener('pointerdown', ()=> shiftToggle(btn));
+      keyMap['shift'] = btn;
     } else if(def.type==='backspace'){
       btn.className='key fn';
       btn.dataset.type='backspace';
       btn.innerHTML='<span class="ch">⌫</span><span class="tag">'+note.name+'</span><span class="bubble"></span>';
       btn.addEventListener('pointerdown', ()=> functionalPress(btn));
+      keyMap['backspace'] = btn;
     } else if(def.type==='emoji-toggle'){
       btn.className='key fn'; btn.id='emojiBtn';
       btn.innerHTML='<span class="ch">😊</span><span class="tag">'+note.name+'</span><span class="bubble"></span>';
@@ -393,6 +485,7 @@
       btn.dataset.type='enter';
       btn.innerHTML='<span class="ch">↵</span><span class="tag">'+note.name+'</span><span class="bubble"></span>';
       btn.addEventListener('pointerdown', ()=> functionalPress(btn));
+      keyMap['enter'] = btn;
     }
     return btn;
   }
@@ -455,6 +548,7 @@
     cursorPos += str.length;
     bridgeCommit(str);
     renderSuggestions();
+    if(document.getElementById('translatePanel').style.display==='flex') updateTranslatePreview();
   }
   function backspace(){
     if(cursorPos<=0) return;
@@ -462,6 +556,7 @@
     cursorPos -= 1;
     bridgeDeleteBackward();
     renderSuggestions();
+    if(document.getElementById('translatePanel').style.display==='flex') updateTranslatePreview();
   }
   function pressEnter(){
     // Panggil sendEnter() dulu (bisa memicu tombol Kirim/Cari sesuai kolom aktif),
@@ -505,20 +600,20 @@
   }
 
   // ---------------- Fitur 1: Prediksi kata / saran ketikan ----------------
-  const DICTIONARY = ['saya','kamu','dia','kita','kami','mereka','aku','anda','ini','itu',
+  const DICTIONARY = [...new Set(['saya','kamu','dia','kita','kami','mereka','aku','anda','ini','itu',
     'yang','dan','atau','tapi','tetapi','karena','jika','kalau','maka','supaya','agar',
     'akan','sudah','belum','sedang','masih','tidak','bukan','jangan','boleh','harus',
     'bisa','mau','ingin','suka','cinta','sayang','baik','bagus','buruk','jelek',
     'besar','kecil','banyak','sedikit','semua','sebagian','setiap','bagaimana','kenapa','mengapa',
-    'kapan','dimana','siapa','apa','apakah','iya','tidak','oke','baiklah','terima',
+    'kapan','dimana','siapa','apa','apakah','iya','oke','baiklah','terima',
     'kasih','terimakasih','maaf','permisi','tolong','mohon','silakan','selamat','pagi','siang',
-    'sore','malam','hari','ini','besok','kemarin','sekarang','nanti','tadi','lagi',
+    'sore','malam','hari','besok','kemarin','sekarang','nanti','tadi','lagi',
     'juga','hanya','saja','cuma','memang','sebenarnya','sebetulnya','mungkin','pasti','tentu',
     'gitar','musik','lagu','nada','main','bermain','nyanyi','chord','senar','ketik',
     'kerja','sekolah','kuliah','rumah','jalan','makan','minum','tidur','bangun','pulang',
-    'pergi','datang','pulang','sampai','tunggu','tunggu','sabar','cepat','lambat','pelan',
-    'whatsapp','chat','pesan','telepon','video','foto','kirim','terima','buka','tutup',
-    'website','aplikasi','android','keyboard','fitur','update','baru','lama','coba','tes'];
+    'pergi','datang','sampai','tunggu','sabar','cepat','lambat','pelan',
+    'whatsapp','chat','pesan','telepon','video','foto','kirim','buka','tutup',
+    'website','aplikasi','android','keyboard','fitur','update','baru','lama','coba','tes'])];
 
   function getCurrentWordRange(){
     let start = cursorPos;
@@ -576,7 +671,23 @@
       panel.appendChild(empty);
       return;
     }
-    clipboardHistory.forEach((item) => {
+    const toolbar = document.createElement('div');
+    toolbar.className = 'clipboard-toolbar';
+    const clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
+    clearBtn.className = 'clipboard-clear';
+    clearBtn.textContent = 'Hapus semua';
+    clearBtn.addEventListener('pointerdown', () => {
+      clipboardHistory = [];
+      saveClipboardHistory();
+      renderClipboardPanel();
+    });
+    toolbar.appendChild(clearBtn);
+    panel.appendChild(toolbar);
+
+    clipboardHistory.forEach((item, i) => {
+      const row = document.createElement('div');
+      row.className = 'clipboard-item-row';
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'clipboard-item';
@@ -585,7 +696,20 @@
         appendText(item);
         renderSuggestions();
       });
-      panel.appendChild(btn);
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'clipboard-item-del';
+      del.textContent = '✕';
+      del.title = 'Hapus item ini';
+      del.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+        clipboardHistory.splice(i, 1);
+        saveClipboardHistory();
+        renderClipboardPanel();
+      });
+      row.appendChild(btn);
+      row.appendChild(del);
+      panel.appendChild(row);
     });
   }
   // Dipanggil dari sisi Java (HtmlKeyboardService) setiap kali clipboard sistem Android berubah.
@@ -597,6 +721,91 @@
     saveClipboardHistory();
     renderClipboardPanel();
   };
+
+  // ---------------- Fitur 2b: Panel GIF ----------------
+  // CATATAN JUJUR: ini BELUM nyambung ke pencarian GIF asli (mis. Tenor/GIPHY),
+  // karena itu butuh koneksi internet + API key di sisi native, dan keyboard
+  // ini didesain jalan offline. Yang ada di bawah cuma placeholder "stiker"
+  // pakai emoji besar biar tata letak & rasanya sudah sama kayak panel GIF
+  // Gboard. Kalau nanti mau pasang GIF sungguhan:
+  //   1) Tambah pemanggilan API Tenor di sisi Java (butuh API key + internet).
+  //   2) Kirim hasil URL gif-nya ke sini, lalu render <img> di grid ini.
+  //   3) Untuk MENGIRIM gif ke kolom teks aplikasi lain, InputMethodService
+  //      perlu commitContent() (bukan cuma commitText), lihat dokumentasi
+  //      InputConnection.commitContent di Android — beda jalur dari commitText.
+  const GIF_STICKERS = [
+    {label:'Semangat', emoji:'🔥'}, {label:'Ketawa', emoji:'😂'}, {label:'Cinta', emoji:'🥰'},
+    {label:'Oke', emoji:'👍'}, {label:'Sedih', emoji:'😢'}, {label:'Kaget', emoji:'😲'},
+    {label:'Gitar', emoji:'🎸'}, {label:'Pesta', emoji:'🎉'}, {label:'Ngantuk', emoji:'😴'},
+  ];
+  function renderGifPanel(){
+    const panel = document.getElementById('gifPanel');
+    panel.innerHTML = '';
+    GIF_STICKERS.forEach(s => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'gif-item';
+      btn.innerHTML = '<span>'+s.emoji+'</span><span class="gif-label">'+s.label+'</span>';
+      btn.addEventListener('pointerdown', () => {
+        // Kalau nanti ada jembatan native buat kirim gif sungguhan, pakai itu;
+        // kalau belum ada (mis. lagi dicoba di browser), fallback kirim emoji-nya saja.
+        if(window.AndroidKeyboard && window.AndroidKeyboard.commitGif){
+          try{ window.AndroidKeyboard.commitGif(s.label); return; }catch(e){}
+        }
+        appendText(s.emoji);
+      });
+      panel.appendChild(btn);
+    });
+  }
+
+  // ---------------- Fitur 2c: Mode Terjemah ----------------
+  // CATATAN JUJUR: sama seperti GIF, ini BELUM nyambung ke mesin terjemahan
+  // sungguhan (mis. Google Cloud Translation) karena itu juga butuh internet +
+  // API key. Kamus di bawah cuma contoh kecil kata-per-kata (offline) biar
+  // fiturnya kelihatan & bisa dicoba. Kalau nanti mau pasang API asli:
+  //   - Ganti isi fungsi translateText() supaya manggil
+  //     window.AndroidKeyboard.translateText(text, from, to) (jembatan baru
+  //     yang perlu ditambah di HtmlKeyboardService.java, yang di baliknya
+  //     manggil API terjemahan lewat internet), lalu tampilkan hasilnya di sini.
+  const MINI_DICT_ID_EN = {
+    'saya':'i','kamu':'you','aku':'i','dia':'he/she','kita':'we','kami':'we','mereka':'they',
+    'ini':'this','itu':'that','yang':'which','dan':'and','atau':'or','tapi':'but','karena':'because',
+    'jika':'if','akan':'will','sudah':'already','belum':'not yet','tidak':'not','bukan':'not',
+    'boleh':'may','harus':'must','bisa':'can','mau':'want','ingin':'want','suka':'like','cinta':'love',
+    'baik':'good','bagus':'good','besar':'big','kecil':'small','banyak':'many','sedikit':'a little',
+    'apa':'what','siapa':'who','kapan':'when','dimana':'where','kenapa':'why','mengapa':'why',
+    'iya':'yes','oke':'okay','terima kasih':'thank you','maaf':'sorry','tolong':'please',
+    'selamat pagi':'good morning','selamat malam':'good night','sekarang':'now','besok':'tomorrow',
+    'kemarin':'yesterday','gitar':'guitar','musik':'music','lagu':'song','nada':'note','main':'play',
+    'rumah':'house','makan':'eat','minum':'drink','tidur':'sleep','pergi':'go','datang':'come',
+    'cepat':'fast','lambat':'slow','pelan':'slow','kirim':'send','buka':'open','tutup':'close',
+    'aplikasi':'application','baru':'new','lama':'old'
+  };
+  const MINI_DICT_EN_ID = Object.fromEntries(Object.entries(MINI_DICT_ID_EN).map(([id,en])=>[en,id]));
+
+  function translateText(str, from, to){
+    if(window.AndroidKeyboard && window.AndroidKeyboard.translateText){
+      try{ return window.AndroidKeyboard.translateText(str, from, to); }catch(e){}
+    }
+    const dict = (from==='id' && to==='en') ? MINI_DICT_ID_EN
+               : (from==='en' && to==='id') ? MINI_DICT_EN_ID : null;
+    if(!dict || !str.trim()) return str;
+    return str.trim().split(/\s+/).map(w=>{
+      const clean = w.toLowerCase().replace(/[.,!?]/g,'');
+      return dict[clean] || w;
+    }).join(' ');
+  }
+
+  function updateTranslatePreview(){
+    const from = document.getElementById('translateFrom').value;
+    const to = document.getElementById('translateTo').value;
+    const preview = document.getElementById('translatePreview');
+    if(!text.trim()){
+      preview.textContent = 'Ketik pakai tuts di bawah, hasil terjemahan muncul di sini…';
+      return;
+    }
+    preview.textContent = translateText(text, from, to);
+  }
 
   // ---------------- Fitur 3: Tema warna ----------------
   function applyTheme(name){
@@ -860,13 +1069,34 @@
   // ---------------- Mic: monophonic pitch detection (autocorrelation) ----------------
   let listening=false, micCtx=null, analyser=null, stream=null, rafId=null;
   let state='idle', sampleAt=0, cooldownUntil=0, smoothedRms=0.001;
+  let sampleTries=0, sampleReadings=[];
 
+  function freqToMidi(freq){ return 69 + 12*Math.log2(freq/440); }
+  function freqToIdx(freq){ return Math.round(freqToMidi(freq)) - BASE_MIDI; }
+
+  function commitDetectedNote(freq){
+    const idx = freqToIdx(freq);
+    if(idx>=0 && idx<NOTE_COUNT){
+      const typed = autoTypeNote(idx);
+      const noteName = NOTES[idx].name;
+      const label = (typed===' ') ? '␣' : (typed==='\n' ? '↵' : typed);
+      showStatus('Nada <b>'+noteName+'</b> ('+freq.toFixed(0)+' Hz) → <b>"'+label+'"</b>');
+    } else {
+      showStatus('Nada di luar jangkauan '+NOTES[0].name+'–'+NOTES[NOTE_COUNT-1].name+' ('+freq.toFixed(0)+' Hz).');
+    }
+  }
+
+  // Mengembalikan {freq, clarity} atau null. "clarity" (0..1) mengukur seberapa
+  // periodik sinyalnya — dekat 1 berarti nada tunggal yang bersih (senar dipetik
+  // jelas), rendah berarti kemungkinan besar noise/dengung/lebih dari satu senar
+  // berbunyi bareng. Nilai ini dipakai buat nyaring hasil yang meragukan supaya
+  // huruf yang terketik gak salah-salah lagi.
   function autoCorrelate(buf, sampleRate){
     const SIZE = buf.length;
     let rms=0;
     for(let i=0;i<SIZE;i++) rms += buf[i]*buf[i];
     rms = Math.sqrt(rms/SIZE);
-    if(rms < 0.012) return -1;
+    if(rms < 0.012) return null;
 
     let r1=0, r2=SIZE-1;
     const thres=0.2;
@@ -874,7 +1104,7 @@
     for(let i=1;i<SIZE/2;i++){ if(Math.abs(buf[SIZE-i])<thres){ r2=SIZE-i; break; } }
     const trimmed = buf.slice(r1, r2);
     const n = trimmed.length;
-    if(n < 8) return -1;
+    if(n < 8) return null;
 
     const c = new Float32Array(n);
     for(let lag=0; lag<n; lag++){
@@ -882,19 +1112,31 @@
       for(let i=0; i<n-lag; i++) sum += trimmed[i]*trimmed[i+lag];
       c[lag]=sum;
     }
+    if(c[0] <= 0) return null;
+
+    // Cari trough (lembah) pertama, lalu puncak korelasi pertama sesudahnya —
+    // ini yang memastikan kita kunci ke periode fundamental (nada asli),
+    // bukan ke harmonik/kelipatannya yang sering bikin salah oktaf.
     let d=0;
     while(d<n-1 && c[d]>c[d+1]) d++;
     let maxVal=-1, maxPos=-1;
     for(let i=d;i<n;i++){
       if(c[i]>maxVal){ maxVal=c[i]; maxPos=i; }
     }
-    if(maxPos<=0) return -1;
+    if(maxPos<=0) return null;
+
+    // Kejernihan = seberapa besar puncak korelasi dibanding energi total (c[0]).
+    // Nada gitar yang dipetik jelas biasanya di atas ~0.85; di bawah itu biasanya
+    // noise, senar teredam, atau lebih dari satu senar berbunyi bareng.
+    const clarity = maxVal / c[0];
+    if(clarity < 0.82) return null;
+
     let T0 = maxPos;
     const x1=c[T0-1]||0, x2=c[T0], x3=(T0+1<n)?c[T0+1]:0;
     const a=(x1+x3-2*x2)/2, b=(x3-x1)/2;
     if(a) T0 = T0 - b/(2*a);
-    if(T0<=0) return -1;
-    return sampleRate/T0;
+    if(T0<=0) return null;
+    return { freq: sampleRate/T0, clarity };
   }
 
   function micLoop(){
@@ -908,28 +1150,52 @@
     if(state==='idle'){
       if(rms>0.02 && rms>smoothedRms*1.6 && now>cooldownUntil){
         state='sampling';
-        sampleAt = now + 45;
+        sampleTries=0;
+        sampleReadings=[];
+        // Kasih jeda dikit dulu (~55ms) biar transien petikan gitar mereda dan
+        // gelombangnya udah cukup stabil buat diukur — mengurangi salah baca nada.
+        sampleAt = now + 55;
         showStatus('Mendengar petikan…');
       }
     } else if(state==='sampling'){
       if(now>=sampleAt){
-        const freq = autoCorrelate(buf, micCtx.sampleRate);
-        if(freq>0){
-          const midi = 69 + 12*Math.log2(freq/440);
-          const idx = Math.round(midi) - BASE_MIDI;
-          if(idx>=0 && idx<NOTE_COUNT){
-            const typed = autoTypeNote(idx);
-            const noteName = NOTES[idx].name;
-            const label = (typed===' ') ? '␣' : (typed==='\n' ? '↵' : typed);
-            showStatus('Nada <b>'+noteName+'</b> ('+freq.toFixed(0)+' Hz) → <b>"'+label+'"</b>');
+        const result = autoCorrelate(buf, micCtx.sampleRate);
+        sampleTries++;
+        if(result) sampleReadings.push(result);
+
+        // Baru diketik kalau DUA pembacaan berturut-turut "sepakat" nadanya sama —
+        // TAPI seperti tuner gitar sungguhan: kalau petikannya melenceng dikit
+        // (agak sharp/flat, bukan pas di tengah semitone), itu tetap dianggap
+        // nada yang sama, bukan gagal cocok. Makanya di sini yang dibandingkan
+        // adalah MIDI mentah (dalam satuan cents/semitone) dengan toleransi,
+        // BUKAN hasil pembulatan tiap pembacaan sendiri-sendiri — baru di akhir
+        // hasil rata-ratanya dibulatkan sekali ke nada terdekat (persis cara
+        // tuner "snap" ke not terdekat berapa pun kecil melesetnya).
+        if(sampleReadings.length>=2){
+          const a = sampleReadings[sampleReadings.length-2];
+          const b = sampleReadings[sampleReadings.length-1];
+          const midiA = freqToMidi(a.freq), midiB = freqToMidi(b.freq);
+          if(Math.abs(midiA - midiB) <= 0.6){ // ~60 cents toleransi antar 2 bacaan
+            commitDetectedNote((a.freq+b.freq)/2);
+            state='idle';
+            cooldownUntil = now + 220;
           } else {
-            showStatus('Nada di luar jangkauan '+NOTES[0].name+'–'+NOTES[NOTE_COUNT-1].name+' ('+freq.toFixed(0)+' Hz).');
+            sampleAt = now + 12; // gak sepakat -> coba baca sekali lagi, buang salah satunya
           }
+        } else if(sampleTries >= 6){
+          // Beberapa kali dicoba tapi gak pernah dapat dua bacaan yang sepakat.
+          // Daripada diam saja, pakai bacaan dengan kejernihan tertinggi kalau ada.
+          if(sampleReadings.length){
+            const best = sampleReadings.reduce((p,c)=> c.clarity>p.clarity ? c : p);
+            commitDetectedNote(best.freq);
+          } else {
+            showStatus('Nada belum terdeteksi jelas, coba petik lagi.');
+          }
+          state='idle';
+          cooldownUntil = now + 220;
         } else {
-          showStatus('Nada belum terdeteksi jelas, coba petik lagi.');
+          sampleAt = now + 12;
         }
-        state='idle';
-        cooldownUntil = now + 260;
       }
     }
     smoothedRms = smoothedRms*0.85 + rms*0.15;
@@ -988,6 +1254,7 @@
     if(!key) return;
     e.preventDefault();
     if(key.dataset.type==='note') manualPress(key);
+    else if(key.id==='shiftBtn') shiftToggle(key);
     else functionalPress(key);
   });
 
@@ -1013,17 +1280,24 @@
   const settingsPanel = document.getElementById('settingsPanel');
   const clipboardBtn = document.getElementById('clipboardBtn');
   const clipboardPanel = document.getElementById('clipboardPanel');
+  const gifBtn = document.getElementById('gifBtn');
+  const gifPanel = document.getElementById('gifPanel');
+  const translateBtn = document.getElementById('translateBtn');
+  const translatePanel = document.getElementById('translatePanel');
   const keyboardInner = document.getElementById('keyboardInner');
 
   function closeAllPanels(){
     settingsPanel.style.display = 'none';
     clipboardPanel.style.display = 'none';
+    gifPanel.style.display = 'none';
+    translatePanel.style.display = 'none';
     keyboardInner.style.display = '';
+    [clipboardBtn, gifBtn, translateBtn, settingsBtn].forEach(b=>b.classList.remove('tool-active'));
   }
   settingsBtn.addEventListener('click', ()=>{
     const willOpen = settingsPanel.style.display !== 'block';
     closeAllPanels();
-    if(willOpen){ settingsPanel.style.display = 'block'; keyboardInner.style.display = 'none'; }
+    if(willOpen){ settingsPanel.style.display = 'block'; keyboardInner.style.display = 'none'; settingsBtn.classList.add('tool-active'); }
   });
   clipboardBtn.addEventListener('click', ()=>{
     const willOpen = clipboardPanel.style.display !== 'flex';
@@ -1032,7 +1306,48 @@
       renderClipboardPanel();
       clipboardPanel.style.display = 'flex';
       keyboardInner.style.display = 'none';
+      clipboardBtn.classList.add('tool-active');
     }
+  });
+  gifBtn.addEventListener('click', ()=>{
+    const willOpen = gifPanel.style.display !== 'flex';
+    closeAllPanels();
+    if(willOpen){
+      renderGifPanel();
+      gifPanel.style.display = 'flex';
+      keyboardInner.style.display = 'none';
+      gifBtn.classList.add('tool-active');
+    }
+  });
+  translateBtn.addEventListener('click', ()=>{
+    const willOpen = translatePanel.style.display !== 'flex';
+    closeAllPanels();
+    if(willOpen){
+      // Mode terjemah tetap menampilkan tuts di bawah (bukan cuma panel) supaya
+      // user bisa langsung ngetik/petik nada, hasilnya muncul live di preview.
+      translatePanel.style.display = 'flex';
+      keyboardInner.style.display = '';
+      translateBtn.classList.add('tool-active');
+      updateTranslatePreview();
+    }
+  });
+  document.getElementById('translateSwap').addEventListener('click', ()=>{
+    const from = document.getElementById('translateFrom');
+    const to = document.getElementById('translateTo');
+    const tmp = from.value; from.value = to.value; to.value = tmp;
+    updateTranslatePreview();
+  });
+  document.getElementById('translateFrom').addEventListener('change', updateTranslatePreview);
+  document.getElementById('translateTo').addEventListener('change', updateTranslatePreview);
+  document.getElementById('translateInsert').addEventListener('click', ()=>{
+    const from = document.getElementById('translateFrom').value;
+    const to = document.getElementById('translateTo').value;
+    if(!text.trim()) return;
+    const result = translateText(text, from, to);
+    bridgeCommit(' → ' + result);
+    text = text + ' → ' + result;
+    cursorPos = text.length;
+    showStatus('Terjemahan disisipkan.');
   });
 
   document.getElementById('oneHandBtn').addEventListener('click', toggleOneHand);
