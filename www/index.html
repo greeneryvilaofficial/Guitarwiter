@@ -1056,7 +1056,7 @@
       const typed = autoTypeNote(idx);
       const noteName = NOTES[idx].name;
       const label = (typed===' ') ? '␣' : (typed==='\n' ? '↵' : typed);
-      showStatus('Nada <b>'+noteName+'</b> ('+Math.round(freq)+' Hz) → <b>"'+label+'"</b>');
+      showStatus('Nada <b>'+noteName+'</b> ('+Math.round(freq)+' Hz)'+centsOffsetLabel(freq)+' → <b>"'+label+'"</b>');
     }
   };
   window.onNativeOutOfRange = function(freq){
@@ -1074,13 +1074,26 @@
   function freqToMidi(freq){ return 69 + 12*Math.log2(freq/440); }
   function freqToIdx(freq){ return Math.round(freqToMidi(freq)) - BASE_MIDI; }
 
+  // Selisih dalam "cent" (1/100 semitone) antara frekuensi yang kedengaran dan
+  // nada standar terdekat — persis angka yang ditunjukkan jarum tuner gitar
+  // beneran. Dipakai buat kasih tahu user seberapa tajam/kempes petikannya,
+  // meski nada tetap dianggap sama & tetap diketik selama masih masuk toleransi.
+  function centsOffsetLabel(freq){
+    const midi = freqToMidi(freq);
+    const cents = Math.round((midi - Math.round(midi)) * 100);
+    if(cents === 0) return ' <span style="opacity:.75">(pas)</span>';
+    const arrow = cents > 0 ? '↑' : '↓';
+    const word = cents > 0 ? 'tajam' : 'kempes';
+    return ' <span style="opacity:.75">('+arrow+Math.abs(cents)+'¢ '+word+')</span>';
+  }
+
   function commitDetectedNote(freq){
     const idx = freqToIdx(freq);
     if(idx>=0 && idx<NOTE_COUNT){
       const typed = autoTypeNote(idx);
       const noteName = NOTES[idx].name;
       const label = (typed===' ') ? '␣' : (typed==='\n' ? '↵' : typed);
-      showStatus('Nada <b>'+noteName+'</b> ('+freq.toFixed(0)+' Hz) → <b>"'+label+'"</b>');
+      showStatus('Nada <b>'+noteName+'</b> ('+freq.toFixed(0)+' Hz)'+centsOffsetLabel(freq)+' → <b>"'+label+'"</b>');
     } else {
       showStatus('Nada di luar jangkauan '+NOTES[0].name+'–'+NOTES[NOTE_COUNT-1].name+' ('+freq.toFixed(0)+' Hz).');
     }
@@ -1091,6 +1104,17 @@
   // jelas), rendah berarti kemungkinan besar noise/dengung/lebih dari satu senar
   // berbunyi bareng. Nilai ini dipakai buat nyaring hasil yang meragukan supaya
   // huruf yang terketik gak salah-salah lagi.
+  //
+  // Algoritma: NSDF (Normalized Square Difference Function), inti dari McLeod
+  // Pitch Method — algoritma yang sungguhan dipakai tuner gitar profesional
+  // (mis. di aplikasi tuner populer & library "pitchy"). Dibanding autokorelasi
+  // polos (versi lama), NSDF menormalkan energi di tiap lag sehingga:
+  //  - Puncaknya jauh lebih stabil & tajam, jadi nada yang dipetik agak fals/
+  //    tajam (melenceng sedikit dari frekuensi standarnya) tetap ketemu periode
+  //    yang benar, gak "kabur" karena energi sinyal yang meluruh.
+  //  - Pemilihan "key maximum" (puncak lokal PERTAMA yang tingginya sudah dekat
+  //    puncak tertinggi) jauh lebih tahan salah oktaf dibanding cuma cari
+  //    puncak global sesudah lembah pertama.
   function autoCorrelate(buf, sampleRate){
     const SIZE = buf.length;
     let rms=0;
@@ -1098,42 +1122,72 @@
     rms = Math.sqrt(rms/SIZE);
     if(rms < 0.012) return null;
 
+    // Buang keheningan di ujung sinyal (biar NSDF gak "diencerkan" oleh sample
+    // nol/transien di awal-akhir petikan).
     let r1=0, r2=SIZE-1;
     const thres=0.2;
     for(let i=0;i<SIZE/2;i++){ if(Math.abs(buf[i])<thres){ r1=i; break; } }
     for(let i=1;i<SIZE/2;i++){ if(Math.abs(buf[SIZE-i])<thres){ r2=SIZE-i; break; } }
-    const trimmed = buf.slice(r1, r2);
+    let trimmed = buf.slice(r1, r2);
+
+    // Batasi jangkauan frekuensi yang dicari — sedikit lebih lebar dari nada
+    // gitar aslinya (55Hz–1300Hz vs jangkauan tuts ~82Hz–988Hz) supaya senar
+    // yang dipetik agak melenceng turun/naik dari standar tetap kedeteksi,
+    // sekaligus membatasi biaya komputasi NSDF biar tetap ringan di HP.
+    const minLag = Math.max(2, Math.floor(sampleRate/1300));
+    const maxLagWanted = Math.ceil(sampleRate/55);
+    const wantedLen = Math.min(trimmed.length, maxLagWanted*3);
+    trimmed = trimmed.slice(0, wantedLen);
     const n = trimmed.length;
-    if(n < 8) return null;
+    const maxLag = Math.min(maxLagWanted, n-1);
+    if(n < 8 || maxLag <= minLag+1) return null;
 
-    const c = new Float32Array(n);
-    for(let lag=0; lag<n; lag++){
-      let sum=0;
-      for(let i=0; i<n-lag; i++) sum += trimmed[i]*trimmed[i+lag];
-      c[lag]=sum;
+    const nsdf = new Float32Array(maxLag+1);
+    for(let lag=0; lag<=maxLag; lag++){
+      let acf=0, m=0;
+      for(let i=0; i<n-lag; i++){
+        const a = trimmed[i], b = trimmed[i+lag];
+        acf += a*b;
+        m += a*a + b*b;
+      }
+      nsdf[lag] = m>0 ? (2*acf/m) : 0;
     }
-    if(c[0] <= 0) return null;
 
-    // Cari trough (lembah) pertama, lalu puncak korelasi pertama sesudahnya —
-    // ini yang memastikan kita kunci ke periode fundamental (nada asli),
-    // bukan ke harmonik/kelipatannya yang sering bikin salah oktaf.
-    let d=0;
-    while(d<n-1 && c[d]>c[d+1]) d++;
-    let maxVal=-1, maxPos=-1;
-    for(let i=d;i<n;i++){
-      if(c[i]>maxVal){ maxVal=c[i]; maxPos=i; }
+    // Cari semua puncak lokal di jangkauan lag yang diminati, lalu ambil yang
+    // PERTAMA (lag terkecil) yang tingginya minimal 90% dari puncak tertinggi
+    // — ini trik utama McLeod buat menghindari salah oktaf, karena puncak
+    // fundamental biasanya hampir sama tinggi dengan puncak harmoniknya tapi
+    // muncul lebih dulu (lag lebih kecil).
+    const peaks = [];
+    for(let lag=minLag+1; lag<maxLag; lag++){
+      if(nsdf[lag] > nsdf[lag-1] && nsdf[lag] >= nsdf[lag+1] && nsdf[lag] > 0){
+        peaks.push(lag);
+      }
     }
-    if(maxPos<=0) return null;
+    if(!peaks.length) return null;
 
-    // Kejernihan = seberapa besar puncak korelasi dibanding energi total (c[0]).
-    // Nada gitar yang dipetik jelas biasanya di atas ~0.85; di bawah itu biasanya
-    // noise, senar teredam, atau lebih dari satu senar berbunyi bareng.
-    const clarity = maxVal / c[0];
-    if(clarity < 0.82) return null;
+    let globalMax = -Infinity;
+    for(const p of peaks) if(nsdf[p] > globalMax) globalMax = nsdf[p];
+    if(globalMax <= 0) return null;
 
-    let T0 = maxPos;
-    const x1=c[T0-1]||0, x2=c[T0], x3=(T0+1<n)?c[T0+1]:0;
-    const a=(x1+x3-2*x2)/2, b=(x3-x1)/2;
+    const K = 0.9; // ambang "key maximum"
+    let chosen = peaks[0];
+    for(const p of peaks){
+      if(nsdf[p] >= K*globalMax){ chosen = p; break; }
+    }
+
+    const clarity = nsdf[chosen];
+    if(clarity < 0.82) return null; // ambang kejernihan, sama seperti sebelumnya
+
+    // Interpolasi parabola di sekitar puncak terpilih buat presisi sub-sample —
+    // ini yang bikin hasil akhir presisi sampai pecahan Hz, bukan cuma
+    // sepresisi satu sample, walau nadanya melenceng sedikit dari standar.
+    let T0 = chosen;
+    const x1 = (chosen-1>=0) ? nsdf[chosen-1] : 0;
+    const x2 = nsdf[chosen];
+    const x3 = (chosen+1<=maxLag) ? nsdf[chosen+1] : 0;
+    const a = (x1 + x3 - 2*x2) / 2;
+    const b = (x3 - x1) / 2;
     if(a) T0 = T0 - b/(2*a);
     if(T0<=0) return null;
     return { freq: sampleRate/T0, clarity };
