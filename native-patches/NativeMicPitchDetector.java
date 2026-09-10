@@ -23,9 +23,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Algoritma di bawah ini port dari fungsi autoCorrelate() + micLoop() di
  * index.html, dan HARUS dijaga tetap sinkron dengan versi JS itu supaya
  * jalur native & jalur WebView terasa sama persis buat user:
- *   - autoCorrelate() sekarang juga menghitung "clarity" (kejernihan sinyal,
- *     puncak korelasi dibanding energi total) dan menolak bacaan yang gak
- *     cukup jernih -- biar noise/dengung/senar teredam gak nyasar jadi huruf.
+ *   - autoCorrelate() memakai NSDF (Normalized Square Difference Function,
+ *     inti dari McLeod Pitch Method -- algoritma tuner gitar profesional),
+ *     yang jauh lebih tahan salah oktaf dan tetap kunci ke nada yang benar
+ *     walau senar dipetik agak fals/tajam (melenceng sedikit dari frekuensi
+ *     standarnya). "clarity" (0..1, puncak NSDF terpilih) dipakai buat
+ *     menolak bacaan yang gak cukup jernih -- biar noise/dengung/senar
+ *     teredam gak nyasar jadi huruf.
  *   - Nada baru di-commit (dikirim ke listener) setelah DUA bacaan berturut-turut
  *     sepakat di nada yang sama, bukan cuma satu bacaan. Ini yang bikin hasil
  *     jauh lebih akurat, dan karena satu buffer AudioRecord di sini cuma ~35ms
@@ -229,12 +233,17 @@ public class NativeMicPitchDetector {
     }
 
     /**
-     * Port dari fungsi autoCorrelate(buf, sampleRate) di index.html -- termasuk
-     * perhitungan "clarity" (kejernihan): seberapa besar puncak korelasi
-     * dibanding energi total sinyal (c[0]). Nada gitar yang dipetik jelas
-     * biasanya clarity-nya di atas ~0.85; di bawah CLARITY_THRESHOLD biasanya
-     * noise, senar teredam, atau lebih dari satu senar berbunyi bareng --
-     * bacaan seperti itu ditolak (return null) daripada dipaksa jadi huruf.
+     * Port dari fungsi autoCorrelate(buf, sampleRate) di index.html.
+     *
+     * Algoritma: NSDF (Normalized Square Difference Function), inti dari
+     * McLeod Pitch Method -- algoritma yang sungguhan dipakai tuner gitar
+     * profesional. Dibanding autokorelasi polos (versi lama), NSDF menormalkan
+     * energi di tiap lag sehingga puncaknya jauh lebih stabil & tahan salah
+     * oktaf, dan tetap kunci ke periode yang benar walau senar dipetik agak
+     * fals/tajam (melenceng sedikit dari frekuensi standarnya). "clarity"
+     * (0..1, nilai puncak NSDF terpilih) tetap dipakai buat nyaring bacaan
+     * yang meragukan -- di bawah CLARITY_THRESHOLD biasanya noise, senar
+     * teredam, atau lebih dari satu senar berbunyi bareng.
      */
     private static PitchReading autoCorrelate(float[] buf, int size, int sampleRate) {
         double rms = 0;
@@ -250,40 +259,64 @@ public class NativeMicPitchDetector {
         for (int i = 1; i < size / 2; i++) {
             if (Math.abs(buf[size - i]) < thres) { r2 = size - i; break; }
         }
-        int n = r2 - r1;
-        if (n < 8) return null;
+        int trimmedLen = r2 - r1;
+        if (trimmedLen < 8) return null;
+
+        // Batasi jangkauan frekuensi yang dicari -- sedikit lebih lebar dari
+        // nada gitar aslinya (55Hz-1300Hz vs jangkauan tuts ~82Hz-988Hz) supaya
+        // senar yang dipetik agak melenceng turun/naik dari standar tetap
+        // kedeteksi, sekaligus membatasi biaya komputasi NSDF.
+        int minLag = Math.max(2, sampleRate / 1300);
+        int maxLagWanted = (int) Math.ceil(sampleRate / 55.0);
+        int n = Math.min(trimmedLen, maxLagWanted * 3);
+        int maxLag = Math.min(maxLagWanted, n - 1);
+        if (n < 8 || maxLag <= minLag + 1) return null;
 
         float[] trimmed = new float[n];
         System.arraycopy(buf, r1, trimmed, 0, n);
 
-        double[] c = new double[n];
-        for (int lag = 0; lag < n; lag++) {
-            double sum = 0;
-            for (int i = 0; i < n - lag; i++) sum += trimmed[i] * trimmed[i + lag];
-            c[lag] = sum;
+        double[] nsdf = new double[maxLag + 1];
+        for (int lag = 0; lag <= maxLag; lag++) {
+            double acf = 0, m = 0;
+            for (int i = 0; i < n - lag; i++) {
+                double a = trimmed[i], b = trimmed[i + lag];
+                acf += a * b;
+                m += a * a + b * b;
+            }
+            nsdf[lag] = m > 0 ? (2 * acf / m) : 0;
         }
-        if (c[0] <= 0) return null;
 
-        // Cari trough (lembah) pertama, lalu puncak korelasi pertama sesudahnya --
-        // memastikan kita kunci ke periode fundamental (nada asli), bukan ke
-        // harmonik/kelipatannya yang sering bikin salah oktaf.
-        int d = 0;
-        while (d < n - 1 && c[d] > c[d + 1]) d++;
-
-        double maxVal = -1;
-        int maxPos = -1;
-        for (int i = d; i < n; i++) {
-            if (c[i] > maxVal) { maxVal = c[i]; maxPos = i; }
+        // Cari semua puncak lokal di jangkauan lag yang diminati, lalu ambil
+        // yang PERTAMA (lag terkecil) yang tingginya minimal 90% dari puncak
+        // tertinggi -- trik utama McLeod buat menghindari salah oktaf, karena
+        // puncak fundamental biasanya hampir sama tinggi dengan puncak
+        // harmoniknya tapi muncul lebih dulu (lag lebih kecil).
+        java.util.List<Integer> peaks = new java.util.ArrayList<>();
+        for (int lag = minLag + 1; lag < maxLag; lag++) {
+            if (nsdf[lag] > nsdf[lag - 1] && nsdf[lag] >= nsdf[lag + 1] && nsdf[lag] > 0) {
+                peaks.add(lag);
+            }
         }
-        if (maxPos <= 0) return null;
+        if (peaks.isEmpty()) return null;
 
-        double clarity = maxVal / c[0];
+        double globalMax = -Double.MAX_VALUE;
+        for (int p : peaks) if (nsdf[p] > globalMax) globalMax = nsdf[p];
+        if (globalMax <= 0) return null;
+
+        final double K = 0.9; // ambang "key maximum"
+        int chosen = peaks.get(0);
+        for (int p : peaks) {
+            if (nsdf[p] >= K * globalMax) { chosen = p; break; }
+        }
+
+        double clarity = nsdf[chosen];
         if (clarity < CLARITY_THRESHOLD) return null;
 
-        double t0 = maxPos;
-        double x1 = (maxPos - 1 >= 0) ? c[maxPos - 1] : 0;
-        double x2 = c[maxPos];
-        double x3 = (maxPos + 1 < n) ? c[maxPos + 1] : 0;
+        // Interpolasi parabola di sekitar puncak terpilih buat presisi sub-sample.
+        double t0 = chosen;
+        double x1 = (chosen - 1 >= 0) ? nsdf[chosen - 1] : 0;
+        double x2 = nsdf[chosen];
+        double x3 = (chosen + 1 <= maxLag) ? nsdf[chosen + 1] : 0;
         double a = (x1 + x3 - 2 * x2) / 2;
         double b = (x3 - x1) / 2;
         if (a != 0) t0 = t0 - b / (2 * a);
