@@ -21,8 +21,16 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * biasa (yang sudah terbukti granted), tanpa lewat lapisan WebView sama sekali.
  *
  * Algoritma di bawah ini port dari fungsi autoCorrelate() + micLoop() di
- * index.html, dengan tuning tambahan supaya terasa lebih responsif/instan
- * (buffer lebih kecil, cooldown lebih pendek) — mendekati rasa tuner gitar.
+ * index.html, dan HARUS dijaga tetap sinkron dengan versi JS itu supaya
+ * jalur native & jalur WebView terasa sama persis buat user:
+ *   - autoCorrelate() sekarang juga menghitung "clarity" (kejernihan sinyal,
+ *     puncak korelasi dibanding energi total) dan menolak bacaan yang gak
+ *     cukup jernih -- biar noise/dengung/senar teredam gak nyasar jadi huruf.
+ *   - Nada baru di-commit (dikirim ke listener) setelah DUA bacaan berturut-turut
+ *     sepakat di nada yang sama, bukan cuma satu bacaan. Ini yang bikin hasil
+ *     jauh lebih akurat, dan karena satu buffer AudioRecord di sini cuma ~35ms
+ *     (lihat BUFFER_SAMPLES), dua bacaan berturut-turut cuma nambah latensi
+ *     sekitar itu juga -- tetap kerasa instan seperti tuner gitar.
  */
 public class NativeMicPitchDetector {
 
@@ -40,7 +48,9 @@ public class NativeMicPitchDetector {
     private static final int BUFFER_SAMPLES = 1536;
     private static final int BASE_MIDI = 40; // E2 -- HARUS sama persis dengan BASE_MIDI di index.html
     private static final int NOTE_COUNT = 44; // HARUS sama persis dengan NOTE_COUNT di index.html
-    private static final long COOLDOWN_MS = 180; // dipersingkat dari 260ms biar bisa petik lebih cepat berturut-turut
+    private static final long COOLDOWN_MS = 220; // HARUS sama persis dengan cooldownUntil di index.html
+    private static final double CLARITY_THRESHOLD = 0.82; // HARUS sama persis dengan ambang clarity di index.html
+    private static final int MAX_SAMPLE_TRIES = 6; // HARUS sama persis dengan batas percobaan di index.html
 
     private final Context context;
     private final android.os.Handler mainHandler;
@@ -117,6 +127,10 @@ public class NativeMicPitchDetector {
         boolean sampling = false;
         double smoothedRms = 0.001;
         long cooldownUntil = 0;
+        int sampleTries = 0;
+        // Menyimpan bacaan (freq + clarity) selama satu sesi "sampling", dibersihkan
+        // tiap kali onset baru terdeteksi. Sejajar dengan `sampleReadings` di index.html.
+        final java.util.List<PitchReading> readings = new java.util.ArrayList<>();
 
         while (running.get()) {
             int read = audioRecord.read(rawBuf, 0, BUFFER_SAMPLES);
@@ -134,35 +148,99 @@ public class NativeMicPitchDetector {
             if (!sampling) {
                 if (rms > 0.02 && rms > smoothedRms * 1.6 && now > cooldownUntil) {
                     sampling = true;
+                    sampleTries = 0;
+                    readings.clear();
                     postOnset();
+                    // Sengaja TIDAK menganalisis buffer ini juga -- buffer di titik onset
+                    // masih berisi transien awal petikan, bacaan baru dimulai dari buffer
+                    // berikutnya (~35ms lagi) biar gelombangnya sudah lebih stabil.
                 }
             } else {
-                double freq = autoCorrelate(floatBuf, read, SAMPLE_RATE);
-                if (freq > 0) {
-                    double midi = 69 + 12 * (Math.log(freq / 440.0) / Math.log(2));
-                    int idx = (int) Math.round(midi) - BASE_MIDI;
-                    if (idx >= 0 && idx < NOTE_COUNT) {
-                        postPitchIndex(idx, freq);
-                    } else {
-                        postOutOfRange(freq);
+                PitchReading r = autoCorrelate(floatBuf, read, SAMPLE_RATE);
+                sampleTries++;
+                if (r != null) readings.add(r);
+
+                boolean committed = false;
+                if (readings.size() >= 2) {
+                    PitchReading a = readings.get(readings.size() - 2);
+                    PitchReading b = readings.get(readings.size() - 1);
+                    // Seperti tuner gitar sungguhan: yang dibandingkan MIDI mentah (cents)
+                    // dengan toleransi ~60 cents, BUKAN hasil pembulatan tiap bacaan --
+                    // jadi petikan yang agak sharp/flat tetap dianggap nada yang sama.
+                    // Baru di akhir hasil rata-ratanya dibulatkan sekali ke nada terdekat.
+                    double midiA = freqToMidi(a.freq);
+                    double midiB = freqToMidi(b.freq);
+                    if (Math.abs(midiA - midiB) <= 0.6) {
+                        double avgFreq = (a.freq + b.freq) / 2.0;
+                        commit(freqToIdx(avgFreq), avgFreq);
+                        committed = true;
                     }
-                } else {
-                    postUnclear();
                 }
-                sampling = false;
-                cooldownUntil = now + COOLDOWN_MS;
+
+                if (!committed && sampleTries >= MAX_SAMPLE_TRIES) {
+                    // Sudah dicoba beberapa kali tapi gak pernah dapat dua bacaan yang sepakat.
+                    // Daripada diam saja, pakai bacaan dengan clarity tertinggi kalau ada.
+                    if (!readings.isEmpty()) {
+                        PitchReading best = readings.get(0);
+                        for (PitchReading cand : readings) {
+                            if (cand.clarity > best.clarity) best = cand;
+                        }
+                        commit(freqToIdx(best.freq), best.freq);
+                    } else {
+                        postUnclear();
+                    }
+                    committed = true;
+                }
+
+                if (committed) {
+                    sampling = false;
+                    cooldownUntil = now + COOLDOWN_MS;
+                }
             }
 
             smoothedRms = smoothedRms * 0.85 + rms * 0.15;
         }
     }
 
-    /** Port dari fungsi autoCorrelate(buf, sampleRate) di index.html. */
-    private static double autoCorrelate(float[] buf, int size, int sampleRate) {
+    private static double freqToMidi(double freq) {
+        return 69 + 12 * (Math.log(freq / 440.0) / Math.log(2));
+    }
+
+    private static int freqToIdx(double freq) {
+        return (int) Math.round(freqToMidi(freq)) - BASE_MIDI;
+    }
+
+    private void commit(int idx, double freq) {
+        if (idx >= 0 && idx < NOTE_COUNT) {
+            postPitchIndex(idx, freq);
+        } else {
+            postOutOfRange(freq);
+        }
+    }
+
+    /** Hasil satu bacaan autoCorrelate(): frekuensi + seberapa jernih/periodik sinyalnya. */
+    private static final class PitchReading {
+        final double freq;
+        final double clarity;
+        PitchReading(double freq, double clarity) {
+            this.freq = freq;
+            this.clarity = clarity;
+        }
+    }
+
+    /**
+     * Port dari fungsi autoCorrelate(buf, sampleRate) di index.html -- termasuk
+     * perhitungan "clarity" (kejernihan): seberapa besar puncak korelasi
+     * dibanding energi total sinyal (c[0]). Nada gitar yang dipetik jelas
+     * biasanya clarity-nya di atas ~0.85; di bawah CLARITY_THRESHOLD biasanya
+     * noise, senar teredam, atau lebih dari satu senar berbunyi bareng --
+     * bacaan seperti itu ditolak (return null) daripada dipaksa jadi huruf.
+     */
+    private static PitchReading autoCorrelate(float[] buf, int size, int sampleRate) {
         double rms = 0;
         for (int i = 0; i < size; i++) rms += (double) buf[i] * buf[i];
         rms = Math.sqrt(rms / size);
-        if (rms < 0.012) return -1;
+        if (rms < 0.012) return null;
 
         int r1 = 0, r2 = size - 1;
         final double thres = 0.2;
@@ -173,7 +251,7 @@ public class NativeMicPitchDetector {
             if (Math.abs(buf[size - i]) < thres) { r2 = size - i; break; }
         }
         int n = r2 - r1;
-        if (n < 8) return -1;
+        if (n < 8) return null;
 
         float[] trimmed = new float[n];
         System.arraycopy(buf, r1, trimmed, 0, n);
@@ -184,7 +262,11 @@ public class NativeMicPitchDetector {
             for (int i = 0; i < n - lag; i++) sum += trimmed[i] * trimmed[i + lag];
             c[lag] = sum;
         }
+        if (c[0] <= 0) return null;
 
+        // Cari trough (lembah) pertama, lalu puncak korelasi pertama sesudahnya --
+        // memastikan kita kunci ke periode fundamental (nada asli), bukan ke
+        // harmonik/kelipatannya yang sering bikin salah oktaf.
         int d = 0;
         while (d < n - 1 && c[d] > c[d + 1]) d++;
 
@@ -193,7 +275,10 @@ public class NativeMicPitchDetector {
         for (int i = d; i < n; i++) {
             if (c[i] > maxVal) { maxVal = c[i]; maxPos = i; }
         }
-        if (maxPos <= 0) return -1;
+        if (maxPos <= 0) return null;
+
+        double clarity = maxVal / c[0];
+        if (clarity < CLARITY_THRESHOLD) return null;
 
         double t0 = maxPos;
         double x1 = (maxPos - 1 >= 0) ? c[maxPos - 1] : 0;
@@ -202,9 +287,9 @@ public class NativeMicPitchDetector {
         double a = (x1 + x3 - 2 * x2) / 2;
         double b = (x3 - x1) / 2;
         if (a != 0) t0 = t0 - b / (2 * a);
-        if (t0 <= 0) return -1;
+        if (t0 <= 0) return null;
 
-        return sampleRate / t0;
+        return new PitchReading(sampleRate / t0, clarity);
     }
 
     private void postOnset() {
