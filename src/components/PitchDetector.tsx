@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { addText, deleteText, clearText } from '../store/appSlice'
+import { deleteText, clearText } from '../store/appSlice'
 import { usePitchDetection } from '../hooks/usePitchDetection'
 import { performanceOptimizer } from '../services/performanceOptimizer'
 import type { RootState, AppDispatch } from '../store'
@@ -9,7 +9,7 @@ interface PitchDetectorProps {
   isListening: boolean
   onListeningChange: (listening: boolean) => void
   onTextChange: (text: string) => void
-  currentText: string
+  currentText?: string
 }
 
 const PitchDetector = ({

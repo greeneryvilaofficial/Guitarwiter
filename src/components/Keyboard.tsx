@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 
 interface KeyboardProps {
   onKeyPress: (char: string) => void
@@ -66,7 +66,7 @@ const Keyboard = ({ onKeyPress, onDelete, onClear }: KeyboardProps) => {
                 onMouseLeave={() => handleKeyUp(char)}
                 onTouchStart={() => handleTouchStart(char)}
                 onTouchEnd={() => handleTouchEnd(char)}
-                className="key-button flex-1 min-w-12 py-3 px-2 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-all duration-75 active:scale-95 active:bg-accent md:min-w-auto"
+                className="key-button flex-1 min-w-12 py-3 px-2 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-all duration-75 active:scale-95 active:bg-accent md:min-w-14"
               >
                 {char}
               </button>

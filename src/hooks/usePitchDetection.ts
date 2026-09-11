@@ -41,8 +41,8 @@ export const usePitchDetection = (isListening: boolean) => {
 
     let animationId: number
     const detectLoop = () => {
-      analyser.getByteFrequencyData(dataArray)
-      const frequency = detectPitch(dataArray, analyser.context.sampleRate)
+      analyser.getByteFrequencyData(dataArray as Uint8Array)
+      const frequency = detectPitch(dataArray as Uint8Array, analyser.context.sampleRate)
 
       if (frequency > 0) {
         dispatch(setPitch(Math.round(frequency)))
