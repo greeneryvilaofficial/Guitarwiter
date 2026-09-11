@@ -1,8 +1,8 @@
-# Kebijakan Privasi — Genjreng Ketik
+# Kebijakan Privasi — Guitar Witer
 
 Terakhir diperbarui: [isi tanggal]
 
-Genjreng Ketik ("Aplikasi") menghargai privasi penggunanya. Kebijakan ini menjelaskan bagaimana Aplikasi menangani data, khususnya akses mikrofon.
+Guitar Witer ("Aplikasi") menghargai privasi penggunanya. Kebijakan ini menjelaskan bagaimana Aplikasi menangani data, khususnya akses mikrofon.
 
 ## Akses Mikrofon
 Aplikasi meminta izin mikrofon untuk satu tujuan: mendeteksi nada dari gitar yang dimainkan secara langsung, agar bisa mengetikkan huruf yang sesuai secara otomatis.
