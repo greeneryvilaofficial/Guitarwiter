@@ -1,60 +1,53 @@
 import { useState } from 'react'
 import Keyboard from './components/Keyboard'
-import PitchDetector from './components/PitchDetector'
-import InputDisplay from './components/InputDisplay'
-import PerformanceMonitor from './components/PerformanceMonitor'
+import './App.css'
 
 function App() {
-  const [isListening, setIsListening] = useState(false)
-  const [currentText, setCurrentText] = useState('')
-  const [showPerformance, setShowPerformance] = useState(false)
+  const [theme, setTheme] = useState<'dark' | 'light' | 'blue' | 'purple' | 'green'>('dark')
+  const [mode, setMode] = useState<'letters' | 'symbols' | 'emoji'>('letters')
+  const [detectedNote, setDetectedNote] = useState<string | null>(null)
+
+  const handleKeyPress = (char: string, note: string) => {
+    console.log(`Pressed: ${char} (Note: ${note})`)
+    setDetectedNote(note)
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex flex-col">
-      {/* Header */}
-      <header className="p-4 border-b border-gray-700">
-        <div className="max-w-6xl mx-auto flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-white">🎸 GuitarWiter</h1>
-            <p className="text-gray-400 text-sm">Real-time Guitar-to-Keyboard Input</p>
-          </div>
-          <button
-            onClick={() => setShowPerformance(!showPerformance)}
-            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition"
-          >
-            {showPerformance ? 'Hide' : 'Show'} Performance
-          </button>
+    <div className={`app theme-${theme}`}>
+      <div className="app-header">
+        <h1>🎸 GuitarWiter Keyboard</h1>
+        <p>Petik nada gitar untuk mengetik</p>
+      </div>
+      
+      <div className="controls">
+        <div className="control-group">
+          <label>Tema:</label>
+          <select value={theme} onChange={(e) => setTheme(e.target.value as any)}>
+            <option value="dark">Gelap</option>
+            <option value="light">Terang</option>
+            <option value="blue">Biru</option>
+            <option value="purple">Ungu</option>
+            <option value="green">Hijau</option>
+          </select>
         </div>
-      </header>
+        
+        <div className="control-group">
+          <label>Mode:</label>
+          <select value={mode} onChange={(e) => setMode(e.target.value as any)}>
+            <option value="letters">Huruf</option>
+            <option value="symbols">Simbol</option>
+            <option value="emoji">Emoji</option>
+          </select>
+        </div>
+      </div>
 
-      {/* Main Content */}
-      <main className="flex-1 max-w-6xl mx-auto w-full flex flex-col gap-6 p-6">
-        {/* Performance Monitor */}
-        {showPerformance && <PerformanceMonitor />}
+      {detectedNote && (
+        <div className="detected-note">
+          Nada terdeteksi: <strong>{detectedNote}</strong>
+        </div>
+      )}
 
-        {/* Input Display */}
-        <InputDisplay text={currentText} />
-
-        {/* Pitch Detector */}
-        <PitchDetector
-          isListening={isListening}
-          onListeningChange={setIsListening}
-          onTextChange={setCurrentText}
-          currentText={currentText}
-        />
-
-        {/* Keyboard */}
-        <Keyboard
-          onKeyPress={(text) => setCurrentText(currentText + text)}
-          onDelete={() => setCurrentText(currentText.slice(0, -1))}
-          onClear={() => setCurrentText('')}
-        />
-      </main>
-
-      {/* Footer */}
-      <footer className="p-4 border-t border-gray-700 text-center text-gray-400 text-sm">
-        <p>GuitarWiter © 2024 | Powered by TunerPro Pitch Detection</p>
-      </footer>
+      <Keyboard theme={theme} mode={mode} onKeyPress={handleKeyPress} />
     </div>
   )
 }

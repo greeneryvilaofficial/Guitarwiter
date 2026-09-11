@@ -1,81 +1,114 @@
-import { useDispatch } from 'react-redux'
-import { useEffect, useState } from 'react'
-import { setPitch, setNote, updatePerformanceMetrics } from '../store/appSlice'
-import { detectPitch } from '../services/pitchDetection'
-import type { AppDispatch } from '../store'
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { findNearestNote, generateNotes } from '../components/KeyboardCore';
 
-export const usePitchDetection = (isListening: boolean) => {
-  const dispatch = useDispatch<AppDispatch>()
-  const [audioContext, setAudioContext] = useState<AudioContext | null>(null)
-  const [analyser, setAnalyser] = useState<AnalyserNode | null>(null)
-  const [dataArray, setDataArray] = useState<Uint8Array<ArrayBuffer> | null>(null)
-  const [startTime, setStartTime] = useState<number>(0)
+interface PitchDetectionResult {
+  frequency: number;
+  note: string | null;
+  confidence: number;
+  isListening: boolean;
+}
 
-  useEffect(() => {
-    if (!isListening) return
+const BUFFER_SIZE = 4096;
 
-    const initAudio = async () => {
-      try {
-        const context = new (window.AudioContext || (window as any).webkitAudioContext)()
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-        const source = context.createMediaStreamSource(stream)
-        const analyserNode = context.createAnalyser()
-        analyserNode.fftSize = 4096
-        analyserNode.smoothingTimeConstant = 0.8
+export const usePitchDetection = (
+  onNoteDetected?: (note: string, frequency: number) => void
+): PitchDetectionResult => {
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const dataArrayRef = useRef<Uint8Array | null>(null);
+  const [result, setResult] = useState<PitchDetectionResult>({
+    frequency: 0,
+    note: null,
+    confidence: 0,
+    isListening: false,
+  });
+  const animationIdRef = useRef<number | null>(null);
+  const notesRef = useRef(generateNotes());
 
-        source.connect(analyserNode)
-        setAudioContext(context)
-        setAnalyser(analyserNode)
-        setDataArray(new Uint8Array(analyserNode.frequencyBinCount) as Uint8Array<ArrayBuffer>)
-        setStartTime(performance.now())
-      } catch (error) {
-        console.error('Error accessing microphone:', error)
+  const startListening = useCallback(async () => {
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      audioContextRef.current = audioContext;
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const source = audioContext.createMediaStreamAudioSource(stream);
+
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = BUFFER_SIZE * 2;
+      analyserRef.current = analyser;
+
+      source.connect(analyser);
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      dataArrayRef.current = dataArray;
+
+      setResult((prev) => ({ ...prev, isListening: true }));
+      analyzeFrequency();
+    } catch (error) {
+      console.error('Pitch detection error:', error);
+      setResult((prev) => ({ ...prev, isListening: false }));
+    }
+  }, []);
+
+  const stopListening = useCallback(() => {
+    if (animationIdRef.current) {
+      cancelAnimationFrame(animationIdRef.current);
+      animationIdRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    setResult((prev) => ({ ...prev, isListening: false, frequency: 0, note: null }));
+  }, []);
+
+  const analyzeFrequency = useCallback(() => {
+    if (!analyserRef.current || !dataArrayRef.current) return;
+
+    analyserRef.current.getByteFrequencyData(dataArrayRef.current);
+    const nyquist = (audioContextRef.current?.sampleRate || 44100) / 2;
+    const binHz = nyquist / dataArrayRef.current.length;
+    const threshold = 30;
+
+    let maxBin = 0;
+    let maxValue = 0;
+
+    for (let i = 0; i < dataArrayRef.current.length; i++) {
+      if (dataArrayRef.current[i] > maxValue) {
+        maxValue = dataArrayRef.current[i];
+        maxBin = i;
       }
     }
 
-    initAudio()
-  }, [isListening])
+    if (maxValue < threshold) {
+      setResult((prev) => ({ ...prev, frequency: 0, note: null, confidence: 0 }));
+    } else {
+      const frequency = maxBin * binHz;
+      const note = findNearestNote(frequency, notesRef.current);
+      const confidence = Math.min(100, (maxValue / 255) * 100);
 
-  useEffect(() => {
-    if (!isListening || !analyser || !dataArray) return
+      setResult({
+        frequency,
+        note: note?.name || null,
+        confidence,
+        isListening: true,
+      });
 
-    let animationId: number
-    const detectLoop = () => {
-      analyser.getByteFrequencyData(dataArray)
-      const frequency = detectPitch(dataArray, analyser.context.sampleRate)
-
-      if (frequency > 0) {
-        dispatch(setPitch(Math.round(frequency)))
-
-        // Get note name from frequency
-        const note = frequencyToNote(frequency)
-        dispatch(setNote(note))
+      if (note && onNoteDetected) {
+        onNoteDetected(note.name, frequency);
       }
-
-      // Track latency
-      const latency = performance.now() - startTime
-      if (latency > 0 && latency < 100) {
-        dispatch(updatePerformanceMetrics({ latency: Math.round(latency) }))
-      }
-
-      animationId = requestAnimationFrame(detectLoop)
     }
 
-    detectLoop()
+    animationIdRef.current = requestAnimationFrame(analyzeFrequency);
+  }, [onNoteDetected]);
 
+  useEffect(() => {
     return () => {
-      cancelAnimationFrame(animationId)
-      if (audioContext && audioContext.state !== 'closed') {
-        audioContext.close()
-      }
-    }
-  }, [isListening, analyser, dataArray, dispatch, startTime, audioContext])
-}
+      stopListening();
+    };
+  }, [stopListening]);
 
-function frequencyToNote(frequency: number): string {
-  const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
-  const noteNum = 12 * Math.log2(frequency / 16.35)
-  const octave = Math.floor(noteNum / 12)
-  const note = Math.round(noteNum % 12)
-  return `${notes[note]}${octave}`
-}
+  return { ...result, isListening: result.isListening };
+};
+
+export default usePitchDetection;
