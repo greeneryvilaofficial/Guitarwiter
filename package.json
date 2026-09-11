@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint src --ext ts,tsx",
     "test": "vitest",
@@ -37,6 +37,7 @@
     "tailwindcss": "^3.3.6",
     "postcss": "^8.4.32",
     "autoprefixer": "^10.4.16",
-    "vitest": "^1.0.4"
+    "vitest": "^1.0.4",
+    "terser": "^5.31.0"
   }
 }
