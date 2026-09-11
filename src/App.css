@@ -1,0 +1,89 @@
+.app {
+  min-height: 100vh;
+  background: var(--kb-bg);
+  color: var(--key-text);
+  font-family: 'Roboto', sans-serif;
+  padding: 20px;
+}
+
+.app-header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.app-header h1 {
+  margin: 0 0 10px;
+  font-size: 28px;
+}
+
+.app-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.controls {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  margin-bottom: 30px;
+  flex-wrap: wrap;
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.control-group label {
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.control-group select {
+  background: var(--key-bg);
+  color: var(--key-text);
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.detected-note {
+  background: var(--key-active-bg);
+  color: var(--key-text);
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  text-align: center;
+  font-size: 14px;
+}
+
+.detected-note strong {
+  color: var(--key-tag);
+  font-weight: 700;
+  font-size: 16px;
+}
+
+/* Theme variations */
+.app.theme-light {
+  --kb-bg: #e8eaed;
+  --key-text: #202124;
+}
+
+.app.theme-blue {
+  --kb-bg: #0b2545;
+  --key-text: #e8f0fe;
+}
+
+.app.theme-purple {
+  --kb-bg: #241b2f;
+  --key-text: #f1e8fa;
+}
+
+.app.theme-green {
+  --kb-bg: #0f2a1e;
+  --key-text: #e4f5ea;
+}
