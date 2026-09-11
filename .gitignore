@@ -1,0 +1,33 @@
+# Vite
+dist/
+.vite/
+
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Capacitor
+android/
+ios/
+.capacitor/
+
+# Environment
+.env
+.env.local
+
+# Build outputs
+*.apk
+*.aab
+build/
