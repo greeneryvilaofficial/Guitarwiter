@@ -16,7 +16,6 @@ const PitchDetector = ({
   isListening,
   onListeningChange,
   onTextChange,
-  currentText,
 }: PitchDetectorProps) => {
   const dispatch = useDispatch<AppDispatch>()
   const { currentPitch, currentNote } = useSelector((state: RootState) => state.app)
