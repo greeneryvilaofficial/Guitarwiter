@@ -11,23 +11,33 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    # Optional: pakai ini untuk menguji lebih awal bahwa actions berjalan di Node 24
-    # env:
-    #   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
     steps:
     - name: Checkout code
-      # upgrade ke v5 yang sudah menargetkan Node.js 24
       uses: actions/checkout@v5
       with:
         fetch-depth: 0
 
-    - name: Setup Node.js
-      # upgrade ke v5 yang sudah menargetkan Node.js 24
+    - name: Check for lockfile
+      id: lockcheck
+      run: |
+        if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ] || [ -f yarn.lock ]; then
+          echo "lockfound=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "lockfound=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Setup Node.js (with cache if lockfile exists)
+      if: steps.lockcheck.outputs.lockfound == 'true'
       uses: actions/setup-node@v5
       with:
         node-version: '18'
         cache: 'npm'
+
+    - name: Setup Node.js (no cache if no lockfile)
+      if: steps.lockcheck.outputs.lockfound == 'false'
+      uses: actions/setup-node@v5
+      with:
+        node-version: '18'
 
     - name: Setup Java
       uses: actions/setup-java@v4
@@ -44,8 +54,6 @@ jobs:
 
     - name: Install dependencies
       run: |
-        # Use npm ci when a lockfile exists (faster and reproducible). If no lockfile is present,
-        # fall back to npm install so the job doesn't fail.
         if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ] || [ -f yarn.lock ]; then
           echo "Lockfile found — running npm ci"
           npm ci
