@@ -20,21 +20,16 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * yang di luar jangkauan kode. AudioRecord ini cuma butuh izin RECORD_AUDIO
  * biasa (yang sudah terbukti granted), tanpa lewat lapisan WebView sama sekali.
  *
- * Algoritma di bawah ini port dari fungsi autoCorrelate() + micLoop() di
- * index.html, dan HARUS dijaga tetap sinkron dengan versi JS itu supaya
- * jalur native & jalur WebView terasa sama persis buat user:
- *   - autoCorrelate() memakai NSDF (Normalized Square Difference Function,
- *     inti dari McLeod Pitch Method -- algoritma tuner gitar profesional),
- *     yang jauh lebih tahan salah oktaf dan tetap kunci ke nada yang benar
- *     walau senar dipetik agak fals/tajam (melenceng sedikit dari frekuensi
- *     standarnya). "clarity" (0..1, puncak NSDF terpilih) dipakai buat
- *     menolak bacaan yang gak cukup jernih -- biar noise/dengung/senar
- *     teredam gak nyasar jadi huruf.
- *   - Nada baru di-commit (dikirim ke listener) setelah DUA bacaan berturut-turut
- *     sepakat di nada yang sama, bukan cuma satu bacaan. Ini yang bikin hasil
- *     jauh lebih akurat, dan karena satu buffer AudioRecord di sini cuma ~35ms
- *     (lihat BUFFER_SAMPLES), dua bacaan berturut-turut cuma nambah latensi
- *     sekitar itu juga -- tetap kerasa instan seperti tuner gitar.
+ * Algoritma di bawah ini port dari fungsi yinDetect() + micLoop() di index.html,
+ * dan HARUS dijaga tetap sinkron dengan versi JS itu supaya jalur native & jalur
+ * WebView terasa sama persis buat user:
+ *   - Deteksi pitch pakai algoritma YIN (bukan autokorelasi biasa lagi) --
+ *     jauh lebih tahan salah pilih oktaf (mis. F2 kebaca F3) karena guitar
+ *     sering punya harmonik ke-2 yang lebih kuat dari nada dasarnya sendiri,
+ *     dan autokorelasi polos gampang kejebak kunci ke situ.
+ *   - Nada di-commit langsung di bacaan PERTAMA yang meyakinkan (bukan nunggu
+ *     beberapa bacaan sepakat dulu) -- YIN cukup andal buat itu, jadi gak
+ *     perlu dipetik berkali-kali dulu baru kedeteksi.
  */
 public class NativeMicPitchDetector {
 
@@ -47,14 +42,23 @@ public class NativeMicPitchDetector {
     }
 
     private static final int SAMPLE_RATE = 44100;
-    // 1536 sample @44.1kHz ~= 35ms per baca -- cukup untuk deteksi E2 (~82Hz, perlu
-    // minimal ~538 sample per siklus) sambil tetap terasa cepat, tidak selambat 2048 (46ms).
-    private static final int BUFFER_SAMPLES = 1536;
+    // 4096 sample @44.1kHz ~= 93ms per baca. HARUS sama persis dengan analyser.fftSize
+    // di index.html. Dulu 1536 (35ms) biar terasa cepat, tapi itu cuma ~2.8 siklus
+    // gelombang buat nada rendah kayak E2 (~82Hz) -- ketipisan data bikin YIN (atau
+    // autokorelasi apa pun) gampang salah pilih oktaf. 4096 kasih ~7.6 siklus di
+    // E2, jauh lebih andal. Latensinya tetap kerasa instan karena YIN langsung
+    // commit di bacaan pertama yang yakin (lihat recordLoop()).
+    private static final int BUFFER_SAMPLES = 4096;
     private static final int BASE_MIDI = 40; // E2 -- HARUS sama persis dengan BASE_MIDI di index.html
     private static final int NOTE_COUNT = 44; // HARUS sama persis dengan NOTE_COUNT di index.html
-    private static final long COOLDOWN_MS = 220; // HARUS sama persis dengan cooldownUntil di index.html
-    private static final double CLARITY_THRESHOLD = 0.82; // HARUS sama persis dengan ambang clarity di index.html
-    private static final int MAX_SAMPLE_TRIES = 6; // HARUS sama persis dengan batas percobaan di index.html
+    private static final long COOLDOWN_MS = 180; // HARUS sama persis dengan cooldownUntil di index.html
+    private static final int MAX_SAMPLE_TRIES = 4; // HARUS sama persis dengan batas percobaan di index.html
+    private static final double YIN_THRESHOLD = 0.15; // HARUS sama persis dengan THRESHOLD di index.html
+
+    // Rentang frekuensi yang masuk akal buat dicari (nada gitar yang dipetakan ke
+    // tuts + sedikit margin). HARUS sama persis dengan MIN/MAX_VALID_FREQ di index.html.
+    private static final double MIN_VALID_FREQ = 440.0 * Math.pow(2, (BASE_MIDI - 3 - 69) / 12.0);
+    private static final double MAX_VALID_FREQ = 440.0 * Math.pow(2, (BASE_MIDI + NOTE_COUNT - 1 + 3 - 69) / 12.0);
 
     private final Context context;
     private final android.os.Handler mainHandler;
@@ -132,9 +136,6 @@ public class NativeMicPitchDetector {
         double smoothedRms = 0.001;
         long cooldownUntil = 0;
         int sampleTries = 0;
-        // Menyimpan bacaan (freq + clarity) selama satu sesi "sampling", dibersihkan
-        // tiap kali onset baru terdeteksi. Sejajar dengan `sampleReadings` di index.html.
-        final java.util.List<PitchReading> readings = new java.util.ArrayList<>();
 
         while (running.get()) {
             int read = audioRecord.read(rawBuf, 0, BUFFER_SAMPLES);
@@ -153,53 +154,31 @@ public class NativeMicPitchDetector {
                 if (rms > 0.02 && rms > smoothedRms * 1.6 && now > cooldownUntil) {
                     sampling = true;
                     sampleTries = 0;
-                    readings.clear();
                     postOnset();
                     // Sengaja TIDAK menganalisis buffer ini juga -- buffer di titik onset
                     // masih berisi transien awal petikan, bacaan baru dimulai dari buffer
-                    // berikutnya (~35ms lagi) biar gelombangnya sudah lebih stabil.
+                    // berikutnya biar gelombangnya sudah lebih stabil.
                 }
             } else {
-                PitchReading r = autoCorrelate(floatBuf, read, SAMPLE_RATE);
+                PitchReading r = yinDetect(floatBuf, read, SAMPLE_RATE);
                 sampleTries++;
-                if (r != null) readings.add(r);
 
-                boolean committed = false;
-                if (readings.size() >= 2) {
-                    PitchReading a = readings.get(readings.size() - 2);
-                    PitchReading b = readings.get(readings.size() - 1);
-                    // Seperti tuner gitar sungguhan: yang dibandingkan MIDI mentah (cents)
-                    // dengan toleransi ~60 cents, BUKAN hasil pembulatan tiap bacaan --
-                    // jadi petikan yang agak sharp/flat tetap dianggap nada yang sama.
-                    // Baru di akhir hasil rata-ratanya dibulatkan sekali ke nada terdekat.
-                    double midiA = freqToMidi(a.freq);
-                    double midiB = freqToMidi(b.freq);
-                    if (Math.abs(midiA - midiB) <= 0.6) {
-                        double avgFreq = (a.freq + b.freq) / 2.0;
-                        commit(freqToIdx(avgFreq), avgFreq);
-                        committed = true;
-                    }
-                }
-
-                if (!committed && sampleTries >= MAX_SAMPLE_TRIES) {
-                    // Sudah dicoba beberapa kali tapi gak pernah dapat dua bacaan yang sepakat.
-                    // Daripada diam saja, pakai bacaan dengan clarity tertinggi kalau ada.
-                    if (!readings.isEmpty()) {
-                        PitchReading best = readings.get(0);
-                        for (PitchReading cand : readings) {
-                            if (cand.clarity > best.clarity) best = cand;
-                        }
-                        commit(freqToIdx(best.freq), best.freq);
-                    } else {
-                        postUnclear();
-                    }
-                    committed = true;
-                }
-
-                if (committed) {
+                if (r != null) {
+                    // YIN jauh lebih tahan salah oktaf dibanding autokorelasi biasa, jadi
+                    // begitu dapat SATU bacaan yang meyakinkan langsung dikunci -- gak
+                    // perlu dipetik berkali-kali dulu baru kedeteksi.
+                    commit(freqToIdx(r.freq), r.freq);
+                    sampling = false;
+                    cooldownUntil = now + COOLDOWN_MS;
+                } else if (sampleTries >= MAX_SAMPLE_TRIES) {
+                    // Beberapa buffer berturut masih belum dapat bacaan yang jelas
+                    // (mis. senar teredam / lebih dari satu senar bunyi bareng) --
+                    // baru di sini nyerah.
+                    postUnclear();
                     sampling = false;
                     cooldownUntil = now + COOLDOWN_MS;
                 }
+                // kalau belum yakin & masih ada jatah percobaan, lanjut ke buffer berikutnya
             }
 
             smoothedRms = smoothedRms * 0.85 + rms * 0.15;
@@ -222,107 +201,83 @@ public class NativeMicPitchDetector {
         }
     }
 
-    /** Hasil satu bacaan autoCorrelate(): frekuensi + seberapa jernih/periodik sinyalnya. */
+    /** Hasil satu bacaan yinDetect(): frekuensi + seberapa yakin/periodik sinyalnya. */
     private static final class PitchReading {
         final double freq;
-        final double clarity;
-        PitchReading(double freq, double clarity) {
+        final double probability;
+        PitchReading(double freq, double probability) {
             this.freq = freq;
-            this.clarity = clarity;
+            this.probability = probability;
         }
     }
 
     /**
-     * Port dari fungsi autoCorrelate(buf, sampleRate) di index.html.
-     *
-     * Algoritma: NSDF (Normalized Square Difference Function), inti dari
-     * McLeod Pitch Method -- algoritma yang sungguhan dipakai tuner gitar
-     * profesional. Dibanding autokorelasi polos (versi lama), NSDF menormalkan
-     * energi di tiap lag sehingga puncaknya jauh lebih stabil & tahan salah
-     * oktaf, dan tetap kunci ke periode yang benar walau senar dipetik agak
-     * fals/tajam (melenceng sedikit dari frekuensi standarnya). "clarity"
-     * (0..1, nilai puncak NSDF terpilih) tetap dipakai buat nyaring bacaan
-     * yang meragukan -- di bawah CLARITY_THRESHOLD biasanya noise, senar
-     * teredam, atau lebih dari satu senar berbunyi bareng.
+     * Port dari fungsi yinDetect(buf, sampleRate) di index.html -- algoritma YIN
+     * (De Cheveigne & Kawahara, 2002), dipakai juga di tuner-tuner gitar
+     * profesional. Bedanya sama autokorelasi biasa: YIN pakai "cumulative mean
+     * normalized difference function" yang jauh lebih tahan salah pilih oktaf
+     * (mis. F2 kebaca F3 karena harmonik ke-2 gitar sering lebih kuat dari nada
+     * dasarnya sendiri -- autokorelasi polos gampang kejebak di situ).
+     * Pencarian dibatasi ke rentang frekuensi nada gitar (MIN/MAX_VALID_FREQ)
+     * biar lebih cepat DAN lebih tegas (gak pernah mempertimbangkan periode
+     * yang jelas di luar jangkauan gitar).
      */
-    private static PitchReading autoCorrelate(float[] buf, int size, int sampleRate) {
+    private static PitchReading yinDetect(float[] buf, int size, int sampleRate) {
         double rms = 0;
         for (int i = 0; i < size; i++) rms += (double) buf[i] * buf[i];
         rms = Math.sqrt(rms / size);
         if (rms < 0.012) return null;
 
-        int r1 = 0, r2 = size - 1;
-        final double thres = 0.2;
-        for (int i = 0; i < size / 2; i++) {
-            if (Math.abs(buf[i]) < thres) { r1 = i; break; }
-        }
-        for (int i = 1; i < size / 2; i++) {
-            if (Math.abs(buf[size - i]) < thres) { r2 = size - i; break; }
-        }
-        int trimmedLen = r2 - r1;
-        if (trimmedLen < 8) return null;
+        int minTau = Math.max(2, (int) Math.floor(sampleRate / MAX_VALID_FREQ));
+        int maxTau = Math.min(size / 2 - 1, (int) Math.ceil(sampleRate / MIN_VALID_FREQ));
+        if (maxTau <= minTau) return null;
 
-        // Batasi jangkauan frekuensi yang dicari -- sedikit lebih lebar dari
-        // nada gitar aslinya (55Hz-1300Hz vs jangkauan tuts ~82Hz-988Hz) supaya
-        // senar yang dipetik agak melenceng turun/naik dari standar tetap
-        // kedeteksi, sekaligus membatasi biaya komputasi NSDF.
-        int minLag = Math.max(2, sampleRate / 1300);
-        int maxLagWanted = (int) Math.ceil(sampleRate / 55.0);
-        int n = Math.min(trimmedLen, maxLagWanted * 3);
-        int maxLag = Math.min(maxLagWanted, n - 1);
-        if (n < 8 || maxLag <= minLag + 1) return null;
-
-        float[] trimmed = new float[n];
-        System.arraycopy(buf, r1, trimmed, 0, n);
-
-        double[] nsdf = new double[maxLag + 1];
-        for (int lag = 0; lag <= maxLag; lag++) {
-            double acf = 0, m = 0;
-            for (int i = 0; i < n - lag; i++) {
-                double a = trimmed[i], b = trimmed[i + lag];
-                acf += a * b;
-                m += a * a + b * b;
+        // Langkah 1: fungsi selisih d(tau), cuma dihitung untuk rentang tau yang relevan.
+        double[] diff = new double[maxTau + 1];
+        for (int tau = minTau; tau <= maxTau; tau++) {
+            double sum = 0;
+            for (int j = 0; j < size - maxTau; j++) {
+                double d = buf[j] - buf[j + tau];
+                sum += d * d;
             }
-            nsdf[lag] = m > 0 ? (2 * acf / m) : 0;
+            diff[tau] = sum;
         }
 
-        // Cari semua puncak lokal di jangkauan lag yang diminati, lalu ambil
-        // yang PERTAMA (lag terkecil) yang tingginya minimal 90% dari puncak
-        // tertinggi -- trik utama McLeod buat menghindari salah oktaf, karena
-        // puncak fundamental biasanya hampir sama tinggi dengan puncak
-        // harmoniknya tapi muncul lebih dulu (lag lebih kecil).
-        java.util.List<Integer> peaks = new java.util.ArrayList<>();
-        for (int lag = minLag + 1; lag < maxLag; lag++) {
-            if (nsdf[lag] > nsdf[lag - 1] && nsdf[lag] >= nsdf[lag + 1] && nsdf[lag] > 0) {
-                peaks.add(lag);
+        // Langkah 2: cumulative mean normalized difference function (CMNDF).
+        double[] cmnd = new double[maxTau + 1];
+        double runningSum = 0;
+        cmnd[minTau] = 1;
+        for (int tau = minTau + 1; tau <= maxTau; tau++) {
+            runningSum += diff[tau];
+            cmnd[tau] = diff[tau] * (tau - minTau) / (runningSum != 0 ? runningSum : 1e-9);
+        }
+
+        // Langkah 3: cari tau TERKECIL (frekuensi tertinggi valid) yang CMNDF-nya
+        // sudah di bawah ambang -- ini yang bikin YIN menghindari salah pilih
+        // oktaf ke bawah (keliru mengunci ke 2x periode/setengah frekuensi asli).
+        int tauEstimate = -1;
+        for (int tau = minTau + 1; tau <= maxTau; tau++) {
+            if (cmnd[tau] < YIN_THRESHOLD) {
+                while (tau + 1 <= maxTau && cmnd[tau + 1] < cmnd[tau]) tau++;
+                tauEstimate = tau;
+                break;
             }
         }
-        if (peaks.isEmpty()) return null;
+        if (tauEstimate == -1) return null;
 
-        double globalMax = -Double.MAX_VALUE;
-        for (int p : peaks) if (nsdf[p] > globalMax) globalMax = nsdf[p];
-        if (globalMax <= 0) return null;
-
-        final double K = 0.9; // ambang "key maximum"
-        int chosen = peaks.get(0);
-        for (int p : peaks) {
-            if (nsdf[p] >= K * globalMax) { chosen = p; break; }
+        // Langkah 4: interpolasi parabola di sekitar tauEstimate biar presisi.
+        int x0 = tauEstimate > minTau ? tauEstimate - 1 : tauEstimate;
+        int x2 = tauEstimate < maxTau ? tauEstimate + 1 : tauEstimate;
+        double betterTau = tauEstimate;
+        if (x0 != tauEstimate && x2 != tauEstimate) {
+            double s0 = cmnd[x0], s1 = cmnd[tauEstimate], s2 = cmnd[x2];
+            double denom = 2 * (2 * s1 - s2 - s0);
+            if (denom != 0) betterTau = tauEstimate + (s2 - s0) / denom;
         }
+        if (betterTau <= 0) return null;
 
-        double clarity = nsdf[chosen];
-        if (clarity < CLARITY_THRESHOLD) return null;
-
-        // Interpolasi parabola di sekitar puncak terpilih buat presisi sub-sample.
-        double t0 = chosen;
-        double x1 = (chosen - 1 >= 0) ? nsdf[chosen - 1] : 0;
-        double x2 = nsdf[chosen];
-        double x3 = (chosen + 1 <= maxLag) ? nsdf[chosen + 1] : 0;
-        double a = (x1 + x3 - 2 * x2) / 2;
-        double b = (x3 - x1) / 2;
-        if (a != 0) t0 = t0 - b / (2 * a);
-        if (t0 <= 0) return null;
-
-        return new PitchReading(sampleRate / t0, clarity);
+        double probability = 1 - cmnd[tauEstimate];
+        return new PitchReading(sampleRate / betterTau, probability);
     }
 
     private void postOnset() {
