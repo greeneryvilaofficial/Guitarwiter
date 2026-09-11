@@ -11,7 +11,7 @@ if "HtmlKeyboardService" in content:
 
 service_block = """    <service
         android:name=".HtmlKeyboardService"
-        android:label="Keyboard HTML Kustom"
+        android:label="Guitar Witer"
         android:permission="android.permission.BIND_INPUT_METHOD"
         android:exported="true">
         <meta-data
