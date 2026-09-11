@@ -1,0 +1,102 @@
+name: Build APK & Release
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+        cache: gradle
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+      with:
+        api-level: 34
+        ndk-version: r25b
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Build web assets
+      run: npm run build
+
+    - name: Initialize Capacitor (if not exists)
+      run: |
+        if [ ! -d "android" ]; then
+          npx cap init guitarwiter com.greeneryvilla.guitarwiter --web-dir dist
+          npx cap add android
+        fi
+
+    - name: Sync Capacitor
+      run: npx cap sync
+
+    - name: Make Gradle executable
+      run: chmod +x android/gradlew
+
+    - name: Build APK Debug
+      run: cd android && ./gradlew assembleDebug --stacktrace
+
+    - name: Build APK Release
+      run: cd android && ./gradlew assembleRelease --stacktrace -Pandroid.useAndroidX=true
+
+    - name: Upload Debug APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-debug.apk
+        path: android/app/build/outputs/apk/debug/app-debug.apk
+        retention-days: 30
+
+    - name: Upload Release APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-release.apk
+        path: android/app/build/outputs/apk/release/app-release.apk
+        retention-days: 30
+
+    - name: Create Release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          android/app/build/outputs/apk/debug/app-debug.apk
+          android/app/build/outputs/apk/release/app-release.apk
+        tag_name: v${{ github.run_number }}
+        generate_release_notes: true
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Comment on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: '✅ APK Build Successful!\n\n📥 Download APK from the Artifacts section or build logs.\n\n- **Debug APK**: app-debug.apk\n- **Release APK**: app-release.apk'
+          })
