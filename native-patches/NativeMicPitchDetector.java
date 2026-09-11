@@ -107,7 +107,7 @@ public class NativeMicPitchDetector {
         running.set(true);
         audioRecord.startRecording();
 
-        recordThread = new Thread(this::recordLoop, "GenjrengMicThread");
+        recordThread = new Thread(this::recordLoop, "GuitarWiterMicThread");
         recordThread.setPriority(Thread.MAX_PRIORITY);
         recordThread.start();
         return true;
