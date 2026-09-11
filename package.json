@@ -8,7 +8,14 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint src --ext ts,tsx",
-    "test": "vitest"
+    "test": "vitest",
+    "capacitor:init": "npx cap init guitarwiter com.greeneryvilla.guitarwiter --web-dir dist",
+    "capacitor:add-android": "npx cap add android",
+    "capacitor:sync": "npx cap sync",
+    "capacitor:build": "npm run build && npx cap sync",
+    "android:build-debug": "cd android && ./gradlew assembleDebug",
+    "android:build-release": "cd android && ./gradlew assembleRelease",
+    "build-apk": "npm run build && npx cap sync && npm run android:build-debug"
   },
   "dependencies": {
     "react": "^18.3.0",
@@ -20,7 +27,7 @@
   "devDependencies": {
     "@capacitor/core": "^6.0.0",
     "@capacitor/cli": "^6.0.0",
-    "@capacitor/android": "^6.0.0"
+    "@capacitor/android": "^6.0.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "@types/node": "^20.10.0",
@@ -31,21 +38,5 @@
     "postcss": "^8.4.32",
     "autoprefixer": "^10.4.16",
     "vitest": "^1.0.4"
-  },
-}
-{
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
-    "lint": "eslint src --ext ts,tsx",
-    "test": "vitest",
-    "capacitor:init": "npx cap init guitarwiter com.greeneryvilla.guitarwiter --web-dir dist",
-    "capacitor:add-android": "npx cap add android",
-    "capacitor:sync": "npx cap sync",
-    "capacitor:build": "npm run build && npx cap sync",
-    "android:build-debug": "cd android && ./gradlew assembleDebug",
-    "android:build-release": "cd android && ./gradlew assembleRelease",
-    "build-apk": "npm run build && npx cap sync && npm run android:build-debug"
   }
 }
