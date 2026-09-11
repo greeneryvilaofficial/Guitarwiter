@@ -8,7 +8,7 @@ export const usePitchDetection = (isListening: boolean) => {
   const dispatch = useDispatch<AppDispatch>()
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null)
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null)
-  const [dataArray, setDataArray] = useState<Uint8Array | null>(null)
+  const [dataArray, setDataArray] = useState<Uint8Array<ArrayBuffer> | null>(null)
   const [startTime, setStartTime] = useState<number>(0)
 
   useEffect(() => {
@@ -26,7 +26,7 @@ export const usePitchDetection = (isListening: boolean) => {
         source.connect(analyserNode)
         setAudioContext(context)
         setAnalyser(analyserNode)
-        setDataArray(new Uint8Array(analyserNode.frequencyBinCount))
+        setDataArray(new Uint8Array(analyserNode.frequencyBinCount) as Uint8Array<ArrayBuffer>)
         setStartTime(performance.now())
       } catch (error) {
         console.error('Error accessing microphone:', error)
@@ -41,8 +41,8 @@ export const usePitchDetection = (isListening: boolean) => {
 
     let animationId: number
     const detectLoop = () => {
-      analyser.getByteFrequencyData(dataArray as Uint8Array)
-      const frequency = detectPitch(dataArray as Uint8Array, analyser.context.sampleRate)
+      analyser.getByteFrequencyData(dataArray)
+      const frequency = detectPitch(dataArray, analyser.context.sampleRate)
 
       if (frequency > 0) {
         dispatch(setPitch(Math.round(frequency)))
