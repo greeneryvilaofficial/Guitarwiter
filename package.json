@@ -1,43 +1,17 @@
 {
-  "name": "guitarwiter",
+  "name": "genjreng-ketik",
   "version": "1.0.0",
-  "description": "Real-time pitch detection guitar-to-keyboard input system with TunerPro algorithm",
-  "type": "module",
+  "description": "Genjreng Ketik — keyboard Android kustom yang mengubah nada gitar menjadi ketikan otomatis.",
+  "private": true,
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
-    "lint": "eslint src --ext ts,tsx",
-    "test": "vitest",
-    "capacitor:init": "npx cap init guitarwiter com.greeneryvilla.guitarwiter --web-dir dist",
-    "capacitor:add-android": "npx cap add android",
-    "capacitor:sync": "npx cap sync",
-    "capacitor:build": "npm run build && npx cap sync",
-    "android:build-debug": "cd android && ./gradlew assembleDebug",
-    "android:build-release": "cd android && ./gradlew assembleRelease",
-    "build-apk": "npm run build && npx cap sync && npm run android:build-debug"
+    "sync": "cap sync android",
+    "open:android": "cap open android"
   },
   "dependencies": {
-    "react": "^18.3.0",
-    "react-dom": "^18.3.0",
-    "@reduxjs/toolkit": "^1.9.7",
-    "react-redux": "^8.1.3",
-    "tone": "^14.8.49"
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/core": "^6.1.2"
   },
   "devDependencies": {
-    "@capacitor/core": "^6.0.0",
-    "@capacitor/cli": "^6.0.0",
-    "@capacitor/android": "^6.0.0",
-    "@types/react": "^18.3.0",
-    "@types/react-dom": "^18.3.0",
-    "@types/node": "^20.10.0",
-    "@vitejs/plugin-react": "^4.2.1",
-    "typescript": "^5.3.3",
-    "vite": "^5.0.7",
-    "tailwindcss": "^3.3.6",
-    "postcss": "^8.4.32",
-    "autoprefixer": "^10.4.16",
-    "vitest": "^1.0.4",
-    "terser": "^5.31.0"
+    "@capacitor/cli": "^6.1.2"
   }
 }

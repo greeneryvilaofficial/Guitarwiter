@@ -1,13 +1,9 @@
 {
-  "appId": "com.greeneryvilla.guitarwiter",
-  "appName": "GuitarWiter",
-  "webDir": "dist",
+  "appId": "com.keyboardkustom.app",
+  "appName": "Genjreng Ketik",
+  "webDir": "www",
+  "bundledWebRuntime": false,
   "server": {
     "androidScheme": "https"
-  },
-  "plugins": {
-    "SplashScreen": {
-      "launchShowDuration": 0
-    }
   }
 }
