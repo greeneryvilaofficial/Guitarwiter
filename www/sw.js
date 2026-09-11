@@ -1,4 +1,4 @@
-// Service worker sederhana untuk Genjreng Ketik.
+// Service worker sederhana untuk Guitar Witer.
 // Fungsinya: menyimpan file inti di cache supaya halaman tetap bisa
 // dimuat walau tanpa koneksi internet (penting karena WebView keyboard
 // akan sering dibuka tanpa jaringan aktif).
