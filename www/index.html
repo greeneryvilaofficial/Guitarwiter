@@ -50,6 +50,13 @@
     --key-bubble-bg:#101114;
     --key-bubble-text:#FFFFFF;
     --key-enter-bg:#1CC9A5;
+    /* ---- Rasio ukuran huruf tuts, bisa diubah 0.85–2.0 lewat Setelan (85%–200%), persis fitur Gboard terbaru ---- */
+    --key-font-scale:1;
+    /* ---- Gaya Material 3 Expressive: tuts berbentuk membulat (pill/stadium),
+       bukan kotak siku seperti keyboard lama. Batas tuts (outline) opsional,
+       default polos menyatu dengan background, bisa dinyalakan lewat Setelan. ---- */
+    --key-radius:20px;
+    --key-border:none;
   }
   /* ---- Tema alternatif ala Gboard: tinggal ganti class di <body> ---- */
   body.theme-light{
@@ -108,20 +115,27 @@
 
   .gboard-toolbar{
     display:flex; align-items:center; justify-content:flex-start;
-    padding:6px 6px; gap:2px; min-height:40px;
+    /* Tinggi toolbar fitur mengikuti rasio Gboard asli: ~10–12% dari total tinggi
+       keyboard. Nilai pastinya (--toolbar-h) dihitung & di-set oleh JS lewat
+       ResizeObserver di kbWrap (lihat sizeToolbarToRatio()), clamp() di sini
+       cuma jaring pengaman sebelum JS sempat jalan / kalau JS gagal. */
+    min-height:var(--toolbar-h, clamp(44px, 11vh, 56px));
+    padding:6px 6px; gap:2px;
     overflow-x:auto; scrollbar-width:none; -ms-overflow-style:none;
   }
   .gboard-toolbar::-webkit-scrollbar{ display:none; }
   .gtool-btn{
-    border:none; background:none; color:#9AA0A6; font-size:1.2rem;
-    width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    border:none; background:none; color:#9AA0A6; font-size:1.25rem;
+    /* Area sentuh 48dp x 48dp sesuai standar Material Design (accessibility target minimum),
+       supaya mic/menu/setelan tidak mudah salah tekan. */
+    width:48px; height:48px; border-radius:50%; display:flex; align-items:center; justify-content:center;
     cursor:pointer; -webkit-tap-highlight-color:transparent; flex:0 0 auto;
     transition:background .1s ease;
   }
   .gtool-btn:active{ background:rgba(255,255,255,.12); }
   .gtool-btn#gifBtn, .gtool-btn#translateBtn{
-    width:auto; min-width:40px; padding:0 10px; font-size:.7rem; font-weight:700;
-    letter-spacing:.02em; border-radius:16px; background:rgba(255,255,255,.06);
+    width:auto; min-width:48px; padding:0 10px; font-size:.72rem; font-weight:700;
+    letter-spacing:.02em; border-radius:18px; background:rgba(255,255,255,.06);
   }
   .gtool-btn.tool-active{ color:var(--key-tag); background:rgba(124,231,196,.14); }
   .gtool-btn.mic-tool{ color:#8AB4F8; }
@@ -137,27 +151,33 @@
   .krow:nth-child(4){ padding:0 0; }
 
   .key{
-    position:relative; flex:1; min-width:0; background:var(--key-bg); border:none; border-radius:6px;
-    padding:11px 0 8px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    position:relative; flex:1; min-width:0; background:var(--key-bg);
+    border:var(--key-border); border-radius:var(--key-radius);
+    padding:12px 0 9px; display:flex; flex-direction:column; align-items:center; justify-content:center;
     box-shadow:0 1.5px 0 var(--shadow); font-family:'Roboto', sans-serif;
     cursor:pointer; user-select:none; -webkit-tap-highlight-color:transparent;
-    min-height:42px;
+    min-height:44px; transition:border-radius .12s ease;
   }
-  .key .ch{ font-size:1.05rem; font-weight:400; color:var(--key-text); line-height:1; }
+  .key .ch{ font-size:calc(1.05rem * var(--key-font-scale)); font-weight:400; color:var(--key-text); line-height:1; }
   .key .tag{ font-size:.48rem; font-weight:700; color:var(--key-tag); margin-top:3px; }
   .key.fn{ background:var(--key-fn-bg); flex:1.3; }
-  .key.fn .ch{ font-size:.85rem; color:#C6C9CD; }
-  .key.fn.key-shift{ flex:1.5; }
-  .key.fn.key-shift .ch{ font-size:1.15rem; }
-  .key.space{ flex:5.2; padding-top:14px; padding-bottom:11px; }
-  .key.space .ch{ font-size:.66rem; color:#C6C9CD; font-weight:500; letter-spacing:.04em; }
+  .key.fn .ch{ font-size:calc(.85rem * var(--key-font-scale)); color:#C6C9CD; }
+  /* Shift & Backspace: rasio lebar 1.5x tuts huruf biasa, sama-sama, biar gampang
+     dijangkau kelingking/jempol saat mengetik cepat (persis spesifikasi Gboard). */
+  .key.fn.key-shift, .key.fn.key-backspace{ flex:1.5; }
+  .key.fn.key-shift .ch{ font-size:calc(1.15rem * var(--key-font-scale)); }
+  /* Spacebar: porsi ~50% dari lebar baris bawah (baris: emoji, ?123, koma, spasi, titik, enter) */
+  .key.space{ flex:6.3; padding-top:14px; padding-bottom:11px; }
+  .key.space .ch{ font-size:calc(.66rem * var(--key-font-scale)); color:#C6C9CD; font-weight:500; letter-spacing:.04em; }
   .key.is-active{ background:var(--key-active-bg); }
   .key.fn.is-active{ background:var(--key-fn-active-bg); }
   .key.shift-on{ background:var(--key-shift-on-bg); }
   .key.caps-lock{ background:var(--key-capslock-bg); }
   .key.caps-lock .ch{ color:#fff; }
-  .key.fn.key-enter{ background:var(--key-enter-bg); flex:1.6; }
-  .key.fn.key-enter .ch{ color:#062B22; font-size:1.05rem; }
+  /* Enter: warna aksen kontras (hijau toska) + bentuk oval/pill supaya jelas ini
+     tombol aksi utama (primary action button), bukan sekadar tuts biasa. */
+  .key.fn.key-enter{ background:var(--key-enter-bg); flex:1.6; border-radius:22px; }
+  .key.fn.key-enter .ch{ color:#062B22; font-size:calc(1.05rem * var(--key-font-scale)); }
   .key.fn.key-enter .tag{ color:#0B3B30; }
   .key.fn.key-enter.is-active{ background:#17AE8D; }
 
@@ -173,7 +193,7 @@
     overflow-y:auto;
   }
   .emoji-btn{
-    position:relative; border:none; background:var(--key-bg); border-radius:8px;
+    position:relative; border:var(--key-border); background:var(--key-bg); border-radius:14px;
     padding:7px 0 5px; cursor:pointer; box-shadow:0 1.5px 0 var(--shadow);
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px;
     user-select:none; -webkit-tap-highlight-color:transparent;
@@ -219,7 +239,13 @@
   .theme-swatch[data-theme="light"]{ background:#FFFFFF; }
   .theme-swatch[data-theme="blue"]{ background:#13315C; }
   .theme-swatch[data-theme="purple"]{ background:#3A2C4A; }
+  .theme-swatch[data-theme="auto"]{ background:linear-gradient(135deg, #FFFFFF 50%, #202124 50%); color:#5F6368; }
   .theme-swatch[data-theme="green"]{ background:#17402C; }
+  .font-scale-row{ display:flex; align-items:center; gap:10px; }
+  .font-scale-row input[type="range"]{ flex:1; accent-color:var(--key-tag); height:24px; }
+  .font-scale-row span{ font-size:.8rem; font-weight:700; color:var(--key-text); min-width:38px; text-align:right; }
+  .key-border-row{ display:flex; align-items:center; gap:10px; font-size:.82rem; color:var(--key-text); cursor:pointer; }
+  .key-border-row input[type="checkbox"]{ width:20px; height:20px; accent-color:var(--key-tag); }
 
   /* ---- Panel Clipboard ---- */
   .clipboard-panel{
@@ -293,10 +319,13 @@
   }
   .translate-note{ font-size:.66rem; color:var(--muted); line-height:1.4; }
 
-  /* ---- Badge angka pojok di baris q-p (mirip hint long-press angka di Gboard) ---- */
+  /* ---- Badge angka pojok di baris q-p (mirip hint long-press angka di Gboard) ----
+     Ukuran ~30% dari ukuran huruf utama (1.05rem * .3 ≈ .315rem), sesuai rasio
+     sub-teks angka di Gboard asli, dan tetap ikut skala --key-font-scale. */
   .key .corner-num{
-    position:absolute; top:2px; right:3px; font-size:.42rem; font-weight:700;
-    color:var(--muted); opacity:.85; line-height:1;
+    position:absolute; top:2px; right:3px;
+    font-size:calc(1.05rem * var(--key-font-scale) * .3);
+    font-weight:700; color:var(--muted); opacity:.85; line-height:1;
   }
   /* ---- Baris angka: tersembunyi di mode huruf (persis Gboard), cuma tampil di mode ?123 ---- */
   .krow-nums{ display:none; }
@@ -339,12 +368,23 @@
   <div class="settings-panel" id="settingsPanel">
     <h4>Pilih Tema Warna</h4>
     <div class="theme-swatches" id="themeSwatches">
+      <div class="theme-swatch" data-theme="auto" title="Otomatis (ikuti sistem)">◐</div>
       <div class="theme-swatch" data-theme="dark" title="Gelap"></div>
       <div class="theme-swatch" data-theme="light" title="Terang">🔆</div>
       <div class="theme-swatch" data-theme="blue" title="Biru"></div>
       <div class="theme-swatch" data-theme="purple" title="Ungu"></div>
       <div class="theme-swatch" data-theme="green" title="Hijau"></div>
     </div>
+    <h4 style="margin-top:16px;">Ukuran Huruf Tuts</h4>
+    <div class="font-scale-row">
+      <input type="range" id="fontScaleRange" min="85" max="200" step="1" value="100">
+      <span id="fontScaleLabel">100%</span>
+    </div>
+    <h4 style="margin-top:16px;">Batas Tuts</h4>
+    <label class="key-border-row">
+      <input type="checkbox" id="keyBorderToggle">
+      <span>Tampilkan garis batas di setiap tuts</span>
+    </label>
   </div>
   <div class="clipboard-panel" id="clipboardPanel"></div>
   <div class="gif-panel" id="gifPanel"></div>
@@ -471,7 +511,7 @@
       btn.addEventListener('pointerdown', ()=> shiftToggle(btn));
       keyMap['shift'] = btn;
     } else if(def.type==='backspace'){
-      btn.className='key fn';
+      btn.className='key fn key-backspace';
       btn.dataset.type='backspace';
       btn.innerHTML='<span class="ch">⌫</span><span class="tag">'+note.name+'</span><span class="bubble"></span>';
       btn.addEventListener('pointerdown', ()=> functionalPress(btn)); // tekan sebentar = hapus 1 karakter, langsung, tanpa jeda
@@ -830,10 +870,17 @@
     preview.textContent = translateText(text, from, to);
   }
 
-  // ---------------- Fitur 3: Tema warna ----------------
+  // ---------------- Fitur 3: Tema warna (termasuk "Otomatis" -> ikut Dark/Light Mode sistem HP) ----------------
+  let currentThemeSetting = 'dark';
+  const systemThemeQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
+  function resolveAutoTheme(){
+    return (systemThemeQuery && systemThemeQuery.matches) ? 'light' : 'dark';
+  }
   function applyTheme(name){
+    currentThemeSetting = name;
+    const resolved = (name === 'auto') ? resolveAutoTheme() : name;
     document.body.className = document.body.className.replace(/theme-\S+/g, '').trim();
-    if(name !== 'dark') document.body.classList.add('theme-' + name);
+    if(resolved !== 'dark') document.body.classList.add('theme-' + resolved);
     document.querySelectorAll('.theme-swatch').forEach(sw => {
       sw.classList.toggle('selected', sw.dataset.theme === name);
     });
@@ -843,6 +890,43 @@
     let saved = 'dark';
     try{ saved = localStorage.getItem('genjreng_theme') || 'dark'; }catch(e){}
     applyTheme(saved);
+  }
+  // Kalau tema "Otomatis" dipilih, ikuti perubahan Dark/Light Mode sistem HP secara live.
+  if(systemThemeQuery){
+    systemThemeQuery.addEventListener('change', ()=>{
+      if(currentThemeSetting === 'auto') applyTheme('auto');
+    });
+  }
+
+  // ---------------- Fitur: Batas Tuts (Key Borders) -- polos menyatu dengan
+  // background secara default, atau tampilkan garis batas kotak tipis di tiap tuts. ----------------
+  function applyKeyBorder(on){
+    document.documentElement.style.setProperty('--key-border', on ? '1px solid rgba(255,255,255,.16)' : 'none');
+    const cb = document.getElementById('keyBorderToggle');
+    if(cb && cb.checked !== on) cb.checked = on;
+    try{ localStorage.setItem('genjreng_key_border', on ? '1' : '0'); }catch(e){}
+  }
+  function loadSavedKeyBorder(){
+    let saved = false;
+    try{ saved = localStorage.getItem('genjreng_key_border') === '1'; }catch(e){}
+    applyKeyBorder(saved);
+  }
+
+  // ---------------- Fitur: Ukuran huruf tuts (85%–200%), sama seperti pengaturan
+  // font size di Gboard terbaru ----------------
+  function applyFontScale(pct){
+    const clamped = Math.max(85, Math.min(200, pct));
+    document.documentElement.style.setProperty('--key-font-scale', (clamped/100).toFixed(2));
+    const label = document.getElementById('fontScaleLabel');
+    if(label) label.textContent = clamped + '%';
+    const range = document.getElementById('fontScaleRange');
+    if(range && Number(range.value) !== clamped) range.value = clamped;
+    try{ localStorage.setItem('genjreng_font_scale', String(clamped)); }catch(e){}
+  }
+  function loadSavedFontScale(){
+    let saved = 100;
+    try{ saved = parseInt(localStorage.getItem('genjreng_font_scale'), 10) || 100; }catch(e){}
+    applyFontScale(saved);
   }
 
   // ---------------- Fitur 4: Mode satu tangan ----------------
@@ -1436,8 +1520,40 @@
 
   // ---------------- Inisialisasi & wiring fitur baru ----------------
   loadSavedTheme();
+  loadSavedFontScale();
+  loadSavedKeyBorder();
   renderSuggestions();
   renderClipboardPanel();
+
+  const keyBorderToggle = document.getElementById('keyBorderToggle');
+  if(keyBorderToggle){
+    keyBorderToggle.addEventListener('change', (e)=> applyKeyBorder(e.target.checked));
+  }
+
+  const fontScaleRange = document.getElementById('fontScaleRange');
+  if(fontScaleRange){
+    fontScaleRange.addEventListener('input', (e)=> applyFontScale(parseInt(e.target.value, 10)));
+  }
+
+  // ---------------- Toolbar fitur: tinggi ~10–12% dari total tinggi keyboard,
+  // sesuai rasio Gboard asli. Dihitung ulang tiap kali ukuran kbWrap berubah
+  // (rotasi layar, buka/tutup panel emoji, dsb) supaya rasionya tetap konsisten. ----------------
+  function sizeToolbarToRatio(){
+    const wrap = document.getElementById('kbWrap');
+    const toolbar = document.getElementById('gboardToolbar');
+    if(!wrap || !toolbar) return;
+    const totalH = wrap.getBoundingClientRect().height;
+    if(totalH <= 0) return;
+    const target = Math.max(44, Math.min(56, totalH * 0.11)); // ~11% dari tinggi total, dibatasi 44–56px
+    toolbar.style.setProperty('--toolbar-h', target + 'px');
+    toolbar.style.minHeight = target + 'px';
+  }
+  if('ResizeObserver' in window){
+    new ResizeObserver(sizeToolbarToRatio).observe(kbWrap);
+  } else {
+    window.addEventListener('resize', sizeToolbarToRatio);
+  }
+  sizeToolbarToRatio();
 
   document.getElementById('themeSwatches').addEventListener('pointerdown', (e)=>{
     const sw = e.target.closest('.theme-swatch');
