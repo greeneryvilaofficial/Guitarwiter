@@ -196,7 +196,6 @@
     text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   }
   .suggest-chip:active{ background:rgba(255,255,255,.1); }
-  .suggest-chip.is-word{ font-weight:700; }
   .ime-status{
     display:none; padding:6px 10px; font-size:.78rem; text-align:center;
     background:#B3261E; color:#FFFFFF; font-family:'Roboto', sans-serif;
@@ -628,16 +627,20 @@
     let candidates = [];
     if(word.length > 0){
       const lower = word.toLowerCase();
-      candidates = DICTIONARY.filter(w => w.startsWith(lower)).slice(0,3);
-      // Tombol pertama selalu kata yang sedang diketik apa adanya, biar bisa "diterima" langsung.
-      candidates = [word, ...candidates.filter(c => c.toLowerCase() !== lower)].slice(0,3);
+      // Cuma tampilkan saran kata SUNGGUHAN dari kamus yang cocok awalannya.
+      // Sebelumnya chip pertama selalu mengulang kata yang sedang diketik apa
+      // adanya -- itu bukan saran, cuma gema dari ketikan sendiri, dan makin
+      // panjang katanya makin memanjang juga chip-nya, bikin bingung dikira
+      // ada "ketikan tersimpan". Sekarang dihapus; kalau tidak ada kata di
+      // kamus yang cocok, baris saran otomatis kosong.
+      candidates = DICTIONARY.filter(w => w.startsWith(lower) && w.toLowerCase() !== lower).slice(0,3);
     } else {
       candidates = ['Halo', 'Terima kasih', 'Oke'];
     }
-    candidates.forEach((c, idx) => {
+    candidates.forEach((c) => {
       const chip = document.createElement('button');
       chip.type = 'button';
-      chip.className = 'suggest-chip' + (idx===0 && word.length>0 ? ' is-word' : '');
+      chip.className = 'suggest-chip';
       chip.textContent = c;
       chip.addEventListener('pointerdown', () => applySuggestion(c));
       bar.appendChild(chip);
@@ -1056,7 +1059,7 @@
       const typed = autoTypeNote(idx);
       const noteName = NOTES[idx].name;
       const label = (typed===' ') ? '␣' : (typed==='\n' ? '↵' : typed);
-      showStatus('Nada <b>'+noteName+'</b> ('+Math.round(freq)+' Hz)'+centsOffsetLabel(freq)+' → <b>"'+label+'"</b>');
+      showStatus('Nada <b>'+noteName+'</b> ('+Math.round(freq)+' Hz) → <b>"'+label+'"</b>');
     }
   };
   window.onNativeOutOfRange = function(freq){
@@ -1069,23 +1072,10 @@
   // ---------------- Mic: monophonic pitch detection (autocorrelation) ----------------
   let listening=false, micCtx=null, analyser=null, stream=null, rafId=null;
   let state='idle', sampleAt=0, cooldownUntil=0, smoothedRms=0.001;
-  let sampleTries=0, sampleReadings=[];
+  let sampleTries=0;
 
   function freqToMidi(freq){ return 69 + 12*Math.log2(freq/440); }
   function freqToIdx(freq){ return Math.round(freqToMidi(freq)) - BASE_MIDI; }
-
-  // Selisih dalam "cent" (1/100 semitone) antara frekuensi yang kedengaran dan
-  // nada standar terdekat — persis angka yang ditunjukkan jarum tuner gitar
-  // beneran. Dipakai buat kasih tahu user seberapa tajam/kempes petikannya,
-  // meski nada tetap dianggap sama & tetap diketik selama masih masuk toleransi.
-  function centsOffsetLabel(freq){
-    const midi = freqToMidi(freq);
-    const cents = Math.round((midi - Math.round(midi)) * 100);
-    if(cents === 0) return ' <span style="opacity:.75">(pas)</span>';
-    const arrow = cents > 0 ? '↑' : '↓';
-    const word = cents > 0 ? 'tajam' : 'kempes';
-    return ' <span style="opacity:.75">('+arrow+Math.abs(cents)+'¢ '+word+')</span>';
-  }
 
   function commitDetectedNote(freq){
     const idx = freqToIdx(freq);
@@ -1093,7 +1083,7 @@
       const typed = autoTypeNote(idx);
       const noteName = NOTES[idx].name;
       const label = (typed===' ') ? '␣' : (typed==='\n' ? '↵' : typed);
-      showStatus('Nada <b>'+noteName+'</b> ('+freq.toFixed(0)+' Hz)'+centsOffsetLabel(freq)+' → <b>"'+label+'"</b>');
+      showStatus('Nada <b>'+noteName+'</b> ('+freq.toFixed(0)+' Hz) → <b>"'+label+'"</b>');
     } else {
       showStatus('Nada di luar jangkauan '+NOTES[0].name+'–'+NOTES[NOTE_COUNT-1].name+' ('+freq.toFixed(0)+' Hz).');
     }
@@ -1104,93 +1094,87 @@
   // jelas), rendah berarti kemungkinan besar noise/dengung/lebih dari satu senar
   // berbunyi bareng. Nilai ini dipakai buat nyaring hasil yang meragukan supaya
   // huruf yang terketik gak salah-salah lagi.
-  //
-  // Algoritma: NSDF (Normalized Square Difference Function), inti dari McLeod
-  // Pitch Method — algoritma yang sungguhan dipakai tuner gitar profesional
-  // (mis. di aplikasi tuner populer & library "pitchy"). Dibanding autokorelasi
-  // polos (versi lama), NSDF menormalkan energi di tiap lag sehingga:
-  //  - Puncaknya jauh lebih stabil & tajam, jadi nada yang dipetik agak fals/
-  //    tajam (melenceng sedikit dari frekuensi standarnya) tetap ketemu periode
-  //    yang benar, gak "kabur" karena energi sinyal yang meluruh.
-  //  - Pemilihan "key maximum" (puncak lokal PERTAMA yang tingginya sudah dekat
-  //    puncak tertinggi) jauh lebih tahan salah oktaf dibanding cuma cari
-  //    puncak global sesudah lembah pertama.
-  function autoCorrelate(buf, sampleRate){
+  // Batas frekuensi yang masuk akal buat dicari (rentang nada gitar yang dipetakan
+  // ke tuts, dikasih sedikit margin di kedua ujung). Membatasi rentang pencarian
+  // begini bukan cuma bikin lebih cepat (jauh lebih sedikit "tau" yang dicek
+  // dibanding menyisir seluruh buffer), tapi juga bikin YIN lebih tegas — dia
+  // gak akan pernah mempertimbangkan periode yang jelas-jelas di luar jangkauan
+  // gitar sebagai kandidat nada.
+  const MIN_VALID_FREQ = 440 * Math.pow(2, (BASE_MIDI - 3 - 69) / 12);
+  const MAX_VALID_FREQ = 440 * Math.pow(2, (BASE_MIDI + NOTE_COUNT - 1 + 3 - 69) / 12);
+
+  /**
+   * Deteksi pitch pakai algoritma YIN (De Cheveigné & Kawahara, 2002) —
+   * dipakai juga di tuner-tuner gitar profesional. Bedanya sama autokorelasi
+   * biasa: YIN pakai "cumulative mean normalized difference function" yang
+   * secara struktural jauh lebih tahan salah pilih oktaf (misalnya F2 kebaca
+   * F3 karena harmonik ke-2 gitar sering lebih kuat dari nada dasarnya sendiri
+   * — autokorelasi polos gampang kejebak di situ, YIN jauh lebih jarang).
+   * Return {freq, probability} kalau yakin, atau null kalau sinyalnya
+   * kurang periodik/kurang jelas (noise, senar teredam, dll).
+   */
+  function yinDetect(buf, sampleRate){
     const SIZE = buf.length;
     let rms=0;
     for(let i=0;i<SIZE;i++) rms += buf[i]*buf[i];
     rms = Math.sqrt(rms/SIZE);
     if(rms < 0.012) return null;
 
-    // Buang keheningan di ujung sinyal (biar NSDF gak "diencerkan" oleh sample
-    // nol/transien di awal-akhir petikan).
-    let r1=0, r2=SIZE-1;
-    const thres=0.2;
-    for(let i=0;i<SIZE/2;i++){ if(Math.abs(buf[i])<thres){ r1=i; break; } }
-    for(let i=1;i<SIZE/2;i++){ if(Math.abs(buf[SIZE-i])<thres){ r2=SIZE-i; break; } }
-    let trimmed = buf.slice(r1, r2);
+    const minTau = Math.max(2, Math.floor(sampleRate / MAX_VALID_FREQ));
+    const maxTau = Math.min(Math.floor(SIZE/2) - 1, Math.ceil(sampleRate / MIN_VALID_FREQ));
+    if(maxTau <= minTau) return null;
 
-    // Batasi jangkauan frekuensi yang dicari — sedikit lebih lebar dari nada
-    // gitar aslinya (55Hz–1300Hz vs jangkauan tuts ~82Hz–988Hz) supaya senar
-    // yang dipetik agak melenceng turun/naik dari standar tetap kedeteksi,
-    // sekaligus membatasi biaya komputasi NSDF biar tetap ringan di HP.
-    const minLag = Math.max(2, Math.floor(sampleRate/1300));
-    const maxLagWanted = Math.ceil(sampleRate/55);
-    const wantedLen = Math.min(trimmed.length, maxLagWanted*3);
-    trimmed = trimmed.slice(0, wantedLen);
-    const n = trimmed.length;
-    const maxLag = Math.min(maxLagWanted, n-1);
-    if(n < 8 || maxLag <= minLag+1) return null;
-
-    const nsdf = new Float32Array(maxLag+1);
-    for(let lag=0; lag<=maxLag; lag++){
-      let acf=0, m=0;
-      for(let i=0; i<n-lag; i++){
-        const a = trimmed[i], b = trimmed[i+lag];
-        acf += a*b;
-        m += a*a + b*b;
+    // Langkah 1: fungsi selisih d(tau) = jumlah (x[j]-x[j+tau])^2, cuma dihitung
+    // untuk rentang tau yang relevan (hemat -- gak perlu hitung tau di luar jangkauan gitar).
+    const diff = new Float32Array(maxTau + 1);
+    for(let tau=minTau; tau<=maxTau; tau++){
+      let sum=0;
+      for(let j=0; j<SIZE-maxTau; j++){
+        const d = buf[j]-buf[j+tau];
+        sum += d*d;
       }
-      nsdf[lag] = m>0 ? (2*acf/m) : 0;
+      diff[tau]=sum;
     }
 
-    // Cari semua puncak lokal di jangkauan lag yang diminati, lalu ambil yang
-    // PERTAMA (lag terkecil) yang tingginya minimal 90% dari puncak tertinggi
-    // — ini trik utama McLeod buat menghindari salah oktaf, karena puncak
-    // fundamental biasanya hampir sama tinggi dengan puncak harmoniknya tapi
-    // muncul lebih dulu (lag lebih kecil).
-    const peaks = [];
-    for(let lag=minLag+1; lag<maxLag; lag++){
-      if(nsdf[lag] > nsdf[lag-1] && nsdf[lag] >= nsdf[lag+1] && nsdf[lag] > 0){
-        peaks.push(lag);
+    // Langkah 2: cumulative mean normalized difference function (CMNDF) —
+    // inti dari YIN yang bikin dia jauh lebih tegas milih periode fundamental
+    // dibanding cuma lihat puncak korelasi mentah seperti autokorelasi biasa.
+    const cmnd = new Float32Array(maxTau + 1);
+    let runningSum = 0;
+    cmnd[minTau] = 1;
+    for(let tau=minTau+1; tau<=maxTau; tau++){
+      runningSum += diff[tau];
+      cmnd[tau] = diff[tau] * (tau - minTau) / (runningSum || 1e-9);
+    }
+
+    // Langkah 3: cari tau TERKECIL (frekuensi tertinggi yang valid) yang CMNDF-nya
+    // sudah di bawah ambang batas -- ini cara YIN menghindari salah pilih oktaf
+    // ke bawah (keliru mengunci ke 2x periode/setengah frekuensi asli).
+    const THRESHOLD = 0.15;
+    let tauEstimate = -1;
+    for(let tau=minTau+1; tau<=maxTau; tau++){
+      if(cmnd[tau] < THRESHOLD){
+        while(tau+1<=maxTau && cmnd[tau+1] < cmnd[tau]) tau++; // turun ke lembah lokalnya
+        tauEstimate = tau;
+        break;
       }
     }
-    if(!peaks.length) return null;
+    if(tauEstimate === -1) return null; // gak ada periode yang cukup jelas -> bukan nada tunggal yang bersih
 
-    let globalMax = -Infinity;
-    for(const p of peaks) if(nsdf[p] > globalMax) globalMax = nsdf[p];
-    if(globalMax <= 0) return null;
-
-    const K = 0.9; // ambang "key maximum"
-    let chosen = peaks[0];
-    for(const p of peaks){
-      if(nsdf[p] >= K*globalMax){ chosen = p; break; }
+    // Langkah 4: interpolasi parabola di sekitar tauEstimate biar hasil frekuensinya presisi
+    // (gak dibatasi kelipatan bulat sample, penting buat toleransi ala tuner).
+    const x0 = tauEstimate>minTau ? tauEstimate-1 : tauEstimate;
+    const x2 = tauEstimate<maxTau ? tauEstimate+1 : tauEstimate;
+    let betterTau = tauEstimate;
+    if(x0!==tauEstimate && x2!==tauEstimate){
+      const s0=cmnd[x0], s1=cmnd[tauEstimate], s2=cmnd[x2];
+      const denom = 2*(2*s1 - s2 - s0);
+      if(denom) betterTau = tauEstimate + (s2 - s0)/denom;
     }
+    if(betterTau<=0) return null;
 
-    const clarity = nsdf[chosen];
-    if(clarity < 0.82) return null; // ambang kejernihan, sama seperti sebelumnya
-
-    // Interpolasi parabola di sekitar puncak terpilih buat presisi sub-sample —
-    // ini yang bikin hasil akhir presisi sampai pecahan Hz, bukan cuma
-    // sepresisi satu sample, walau nadanya melenceng sedikit dari standar.
-    let T0 = chosen;
-    const x1 = (chosen-1>=0) ? nsdf[chosen-1] : 0;
-    const x2 = nsdf[chosen];
-    const x3 = (chosen+1<=maxLag) ? nsdf[chosen+1] : 0;
-    const a = (x1 + x3 - 2*x2) / 2;
-    const b = (x3 - x1) / 2;
-    if(a) T0 = T0 - b/(2*a);
-    if(T0<=0) return null;
-    return { freq: sampleRate/T0, clarity };
+    const probability = 1 - cmnd[tauEstimate]; // makin dekat 1 = makin yakin/periodik
+    return { freq: sampleRate/betterTau, clarity: probability };
   }
 
   function micLoop(){
@@ -1205,50 +1189,31 @@
       if(rms>0.02 && rms>smoothedRms*1.6 && now>cooldownUntil){
         state='sampling';
         sampleTries=0;
-        sampleReadings=[];
-        // Kasih jeda dikit dulu (~55ms) biar transien petikan gitar mereda dan
-        // gelombangnya udah cukup stabil buat diukur — mengurangi salah baca nada.
-        sampleAt = now + 55;
+        // Kasih jeda dikit dulu (~45ms) biar transien petikan gitar mereda dan
+        // gelombangnya udah cukup stabil buat diukur.
+        sampleAt = now + 45;
         showStatus('Mendengar petikan…');
       }
     } else if(state==='sampling'){
       if(now>=sampleAt){
-        const result = autoCorrelate(buf, micCtx.sampleRate);
+        const result = yinDetect(buf, micCtx.sampleRate);
         sampleTries++;
-        if(result) sampleReadings.push(result);
-
-        // Baru diketik kalau DUA pembacaan berturut-turut "sepakat" nadanya sama —
-        // TAPI seperti tuner gitar sungguhan: kalau petikannya melenceng dikit
-        // (agak sharp/flat, bukan pas di tengah semitone), itu tetap dianggap
-        // nada yang sama, bukan gagal cocok. Makanya di sini yang dibandingkan
-        // adalah MIDI mentah (dalam satuan cents/semitone) dengan toleransi,
-        // BUKAN hasil pembulatan tiap pembacaan sendiri-sendiri — baru di akhir
-        // hasil rata-ratanya dibulatkan sekali ke nada terdekat (persis cara
-        // tuner "snap" ke not terdekat berapa pun kecil melesetnya).
-        if(sampleReadings.length>=2){
-          const a = sampleReadings[sampleReadings.length-2];
-          const b = sampleReadings[sampleReadings.length-1];
-          const midiA = freqToMidi(a.freq), midiB = freqToMidi(b.freq);
-          if(Math.abs(midiA - midiB) <= 0.6){ // ~60 cents toleransi antar 2 bacaan
-            commitDetectedNote((a.freq+b.freq)/2);
-            state='idle';
-            cooldownUntil = now + 220;
-          } else {
-            sampleAt = now + 12; // gak sepakat -> coba baca sekali lagi, buang salah satunya
-          }
-        } else if(sampleTries >= 6){
-          // Beberapa kali dicoba tapi gak pernah dapat dua bacaan yang sepakat.
-          // Daripada diam saja, pakai bacaan dengan kejernihan tertinggi kalau ada.
-          if(sampleReadings.length){
-            const best = sampleReadings.reduce((p,c)=> c.clarity>p.clarity ? c : p);
-            commitDetectedNote(best.freq);
-          } else {
-            showStatus('Nada belum terdeteksi jelas, coba petik lagi.');
-          }
+        if(result){
+          // YIN jauh lebih tahan salah oktaf dibanding autokorelasi biasa, jadi
+          // begitu dapat SATU bacaan yang meyakinkan langsung dikunci -- gak perlu
+          // petik berkali-kali dulu baru kedeteksi. Ini yang bikin terasa instan
+          // persis seperti tuner gitar sungguhan.
+          commitDetectedNote(result.freq);
           state='idle';
-          cooldownUntil = now + 220;
+          cooldownUntil = now + 180;
+        } else if(sampleTries >= 4){
+          // Beberapa frame berturut masih belum dapat bacaan yang jelas (mis. senar
+          // teredam atau lebih dari satu senar berbunyi) -- baru di sini nyerah.
+          showStatus('Nada belum terdeteksi jelas, coba petik lagi.');
+          state='idle';
+          cooldownUntil = now + 180;
         } else {
-          sampleAt = now + 12;
+          sampleAt = now + 10; // masih terlalu transien -- coba baca lagi di frame berikutnya
         }
       }
     }
