@@ -3,18 +3,11 @@ name: Build Android APK
 on:
   push:
     branches: [ main ]
-    # Push tag versi (mis. "v1.0.0") buat memicu APK diberi nama resmi DAN
-    # otomatis dipublikasikan ke halaman "Releases" repo ini.
-    tags: [ 'v*.*.*' ]
   workflow_dispatch: {}
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    # WAJIB "write" -- tanpa ini step "Buat GitHub Release resmi" di bawah
-    # akan gagal (403) karena GITHUB_TOKEN bawaan cuma baca.
-    permissions:
-      contents: write
     env:
       KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
 
@@ -120,42 +113,12 @@ jobs:
         working-directory: android
         run: ./gradlew assembleDebug --stacktrace
 
-      - name: Tentukan nama & versi resmi APK
-        id: apkname
-        run: |
-          set -e
-          # Nama app buat penamaan file -- ganti di sini kalau mau nama lain.
-          APP_NAME="GenjrengKetik"
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            # Push tag "v1.2.0" -> versi resmi "1.2.0"
-            VERSION="${GITHUB_REF_NAME#v}"
-          else
-            # Build biasa (bukan dari tag) -> ditandai jelas sebagai versi dev,
-            # bukan versi resmi, pakai potongan commit hash.
-            VERSION="dev-${GITHUB_SHA:0:7}"
-          fi
-          echo "app_name=$APP_NAME" >> "$GITHUB_OUTPUT"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Nama resmi APK: ${APP_NAME}-${VERSION}-*.apk"
-
-      - name: Ganti nama APK debug jadi nama resmi
-        if: always()
-        run: |
-          set -e
-          SRC="android/app/build/outputs/apk/debug/app-debug.apk"
-          DEST="$SRC"
-          if [ -f "$SRC" ]; then
-            DEST="android/app/build/outputs/apk/debug/${{ steps.apkname.outputs.app_name }}-${{ steps.apkname.outputs.version }}-debug.apk"
-            cp "$SRC" "$DEST"
-          fi
-          echo "DEBUG_APK_PATH=$DEST" >> "$GITHUB_ENV"
-
       - name: Unggah APK debug sebagai artifact
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: ${{ steps.apkname.outputs.app_name }}-${{ steps.apkname.outputs.version }}-debug
-          path: ${{ env.DEBUG_APK_PATH }}
+          name: app-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: ignore
 
       - name: Build APK release (signed)
@@ -168,31 +131,9 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew assembleRelease --stacktrace
 
-      - name: Ganti nama APK release jadi nama resmi
-        if: env.KEYSTORE_BASE64 != ''
-        run: |
-          set -e
-          SRC="android/app/build/outputs/apk/release/app-release.apk"
-          DEST="$SRC"
-          if [ -f "$SRC" ]; then
-            DEST="android/app/build/outputs/apk/release/${{ steps.apkname.outputs.app_name }}-${{ steps.apkname.outputs.version }}-release.apk"
-            cp "$SRC" "$DEST"
-          fi
-          echo "RELEASE_APK_PATH=$DEST" >> "$GITHUB_ENV"
-
       - name: Unggah APK release sebagai artifact (kalau ada)
         if: env.KEYSTORE_BASE64 != ''
         uses: actions/upload-artifact@v6
         with:
-          name: ${{ steps.apkname.outputs.app_name }}-${{ steps.apkname.outputs.version }}-release
-          path: ${{ env.RELEASE_APK_PATH }}
-          if-no-files-found: ignore
-
-      - name: Buat GitHub Release resmi (cuma kalau push tag versi, mis. v1.0.0)
-        if: startsWith(github.ref, 'refs/tags/') && env.KEYSTORE_BASE64 != ''
-        uses: softprops/action-gh-release@v3
-        with:
-          name: "${{ steps.apkname.outputs.app_name }} ${{ github.ref_name }}"
-          tag_name: ${{ github.ref_name }}
-          files: ${{ env.RELEASE_APK_PATH }}
-          generate_release_notes: true
+          name: app-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
