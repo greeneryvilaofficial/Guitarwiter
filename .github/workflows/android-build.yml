@@ -88,6 +88,9 @@ jobs:
           mkdir -p android/app/src/main/res/xml
           cp native-patches/method.xml android/app/src/main/res/xml/method.xml
 
+      - name: Pasang ikon launcher foto pribadi (mipmap + adaptive icon)
+        run: python3 native-patches/insert_icon.py android/app/src/main/res native-patches/app-icon
+
       - name: Daftarkan service keyboard di AndroidManifest.xml
         run: python3 native-patches/insert_service.py android/app/src/main/AndroidManifest.xml
 
