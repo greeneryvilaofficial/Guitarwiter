@@ -265,6 +265,31 @@ public class NativeMicPitchDetector {
         }
         if (tauEstimate == -1) return null;
 
+        // Langkah 3b: koreksi oktaf (HARUS sinkron dengan yinDetect() di index.html).
+        // Loop di atas mulai dari tau TERKECIL (frekuensi tertinggi) supaya cepat
+        // berhenti di dip pertama yang meyakinkan -- tapi ini sumber utama salah
+        // tangkap F2/F3: kalau harmonik ke-2 gitar cukup kuat, dip CMNDF di situ
+        // (separuh periode / 2x frekuensi) sering ketemu lebih dulu daripada dip
+        // di periode fundamental sebenarnya, jadi nada kekunci satu oktaf ketinggian.
+        // Perbaikan: cek kandidat subharmonik di sekitar 2x tauEstimate (satu oktaf
+        // di bawah); kalau dip-nya sama meyakinkan, situ fundamental sebenarnya.
+        int bestTau = tauEstimate;
+        int octaveCandidate = tauEstimate * 2;
+        if (octaveCandidate <= maxTau) {
+            int margin = Math.max(2, (int) Math.round(tauEstimate * 0.12));
+            int searchLo = Math.max(minTau, octaveCandidate - margin);
+            int searchHi = Math.min(maxTau, octaveCandidate + margin);
+            int localMinTau = -1;
+            double localMinVal = Double.POSITIVE_INFINITY;
+            for (int t = searchLo; t <= searchHi; t++) {
+                if (cmnd[t] < localMinVal) { localMinVal = cmnd[t]; localMinTau = t; }
+            }
+            if (localMinTau != -1 && localMinVal < YIN_THRESHOLD && localMinVal <= cmnd[tauEstimate] * 1.05) {
+                bestTau = localMinTau;
+            }
+        }
+        tauEstimate = bestTau;
+
         // Langkah 4: interpolasi parabola di sekitar tauEstimate biar presisi.
         int x0 = tauEstimate > minTau ? tauEstimate - 1 : tauEstimate;
         int x2 = tauEstimate < maxTau ? tauEstimate + 1 : tauEstimate;
