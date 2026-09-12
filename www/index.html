@@ -1411,15 +1411,18 @@
       for(let t=searchLo; t<=searchHi; t++){
         if(cmnd[t] < localMinVal){ localMinVal = cmnd[t]; localMinTau = t; }
       }
-      // Ambang toleransi: kalau dip subharmonik cuma agak lebih lemah (bukan jauh
-      // lebih buruk) dari dip yang ditemukan di tau pendek, anggap fundamental
-      // sebenarnya ada di sana. Dinaikkan dari 1.05 ke 1.3 -- laporan lapangan
-      // menunjukkan F2 masih sering kekunci ke F3 (harmonik ke-2-nya sering JAUH
-      // lebih kuat di gitar akustik/elektrik tertentu), jadi 1.05 terlalu ketat;
-      // 1.3 cukup longgar buat menangkap kasus itu tanpa mulai salah pilih pas
-      // memang betul-betul beda nada (nada berbeda biasanya dip-nya jauh lebih
-      // buruk dari 1.3x, bukan cuma sedikit).
-      if(localMinTau !== -1 && localMinVal < THRESHOLD && localMinVal <= cmnd[tauEstimate] * 1.3){
+      // Ambang toleransi TIDAK lagi satu angka tetap -- nada RENDAH (tau besar,
+      // dekat senar terbuka di baris angka) memang jauh lebih rawan harmonik
+      // ke-2 kuat, jadi pantas dapat toleransi longgar (1.3x). Tapi nada TINGGI
+      // (tau kecil, baris huruf q-p/a-l) sebelumnya ikut kena toleransi longgar
+      // yang sama, akibatnya nada tinggi yang sebenarnya SUDAH BENAR malah
+      // sering dipaksa turun satu oktaf secara keliru ("ngawur"). Sekarang
+      // toleransinya diinterpolasi menurut posisi tau di rentang pencarian:
+      // makin ke tau besar (nada makin rendah) makin longgar (sampai 1.3x),
+      // makin ke tau kecil (nada makin tinggi) makin ketat (balik ke 1.05x).
+      const lowFreqBias = Math.max(0, Math.min(1, (tauEstimate - minTau) / (maxTau - minTau)));
+      const octaveTolerance = 1.05 + lowFreqBias * (1.3 - 1.05);
+      if(localMinTau !== -1 && localMinVal < THRESHOLD && localMinVal <= cmnd[tauEstimate] * octaveTolerance){
         bestTau = localMinTau;
       }
     }
