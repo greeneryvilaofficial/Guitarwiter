@@ -52,6 +52,17 @@ public class NativeMicPitchDetector {
     private static final int BASE_MIDI = 40; // E2 -- HARUS sama persis dengan BASE_MIDI di index.html
     private static final int NOTE_COUNT = 44; // HARUS sama persis dengan NOTE_COUNT di index.html
     private static final long COOLDOWN_MS = 180; // HARUS sama persis dengan cooldownUntil di index.html
+    // PENTING (fix "kedeteksi ganda / dobel ketikan"): dulu, begitu COOLDOWN_MS
+    // lewat, mic langsung siap mendeteksi onset baru lagi -- padahal senar
+    // gitar yang baru dipetik itu MASIH BERDENGUNG jauh lebih lama dari 180ms,
+    // dan dengungan itu bisa naik-turun (beating antar harmonik / getaran
+    // simpatik senar lain) sampai kebaca sebagai "petikan baru" -> ketikan
+    // dobel dari satu kali petik. Sekarang, sesudah komit, mic WAJIB nunggu
+    // RMS-nya turun di bawah RELEASE_RMS dulu (bukan cuma nunggu waktu) baru
+    // boleh siap deteksi onset baru lagi -- HARUS sama persis dengan
+    // RELEASE_RMS & MAX_RELEASE_WAIT_MS di index.html.
+    private static final double RELEASE_RMS = 0.018;
+    private static final long MAX_RELEASE_WAIT_MS = 1500;
     private static final int MAX_SAMPLE_TRIES = 4; // HARUS sama persis dengan batas percobaan di index.html
     private static final double YIN_THRESHOLD = 0.15; // HARUS sama persis dengan THRESHOLD di index.html
 
@@ -132,9 +143,11 @@ public class NativeMicPitchDetector {
         final short[] rawBuf = new short[BUFFER_SAMPLES];
         final float[] floatBuf = new float[BUFFER_SAMPLES];
 
-        boolean sampling = false;
+        final int STATE_IDLE = 0, STATE_SAMPLING = 1, STATE_RELEASING = 2;
+        int state = STATE_IDLE;
         double smoothedRms = 0.001;
         long cooldownUntil = 0;
+        long releaseWaitUntil = 0;
         int sampleTries = 0;
 
         while (running.get()) {
@@ -150,35 +163,59 @@ public class NativeMicPitchDetector {
             double rms = Math.sqrt(sumSq / read);
             long now = System.currentTimeMillis();
 
-            if (!sampling) {
+            if (state == STATE_IDLE) {
                 if (rms > 0.02 && rms > smoothedRms * 1.6 && now > cooldownUntil) {
-                    sampling = true;
+                    state = STATE_SAMPLING;
                     sampleTries = 0;
                     postOnset();
                     // Sengaja TIDAK menganalisis buffer ini juga -- buffer di titik onset
                     // masih berisi transien awal petikan, bacaan baru dimulai dari buffer
                     // berikutnya biar gelombangnya sudah lebih stabil.
                 }
-            } else {
+            } else if (state == STATE_SAMPLING) {
                 PitchReading r = yinDetect(floatBuf, read, SAMPLE_RATE);
                 sampleTries++;
 
                 if (r != null) {
-                    // YIN jauh lebih tahan salah oktaf dibanding autokorelasi biasa, jadi
-                    // begitu dapat SATU bacaan yang meyakinkan langsung dikunci -- gak
-                    // perlu dipetik berkali-kali dulu baru kedeteksi.
-                    commit(freqToIdx(r.freq), r.freq);
-                    sampling = false;
-                    cooldownUntil = now + COOLDOWN_MS;
+                    int[] idxOut = new int[1];
+                    boolean safe = isCategorySafe(r.freq, r.probability, idxOut);
+                    if (safe) {
+                        // YIN jauh lebih tahan salah oktaf dibanding autokorelasi biasa, jadi
+                        // begitu dapat SATU bacaan yang meyakinkan langsung dikunci -- gak
+                        // perlu dipetik berkali-kali dulu baru kedeteksi.
+                        commit(idxOut[0], r.freq);
+                        state = STATE_RELEASING;
+                        cooldownUntil = now + COOLDOWN_MS;
+                        releaseWaitUntil = now + MAX_RELEASE_WAIT_MS;
+                    } else if (sampleTries < MAX_SAMPLE_TRIES) {
+                        // Bacaannya persis di batas dua kategori tuts berbeda (mis. angka
+                        // vs huruf/tanda baca) dan belum cukup yakin -- coba baca ulang
+                        // dulu daripada asal tebak dan salah kategori.
+                    } else {
+                        postUnclear();
+                        state = STATE_RELEASING;
+                        cooldownUntil = now + COOLDOWN_MS;
+                        releaseWaitUntil = now + MAX_RELEASE_WAIT_MS;
+                    }
                 } else if (sampleTries >= MAX_SAMPLE_TRIES) {
                     // Beberapa buffer berturut masih belum dapat bacaan yang jelas
                     // (mis. senar teredam / lebih dari satu senar bunyi bareng) --
                     // baru di sini nyerah.
                     postUnclear();
-                    sampling = false;
+                    state = STATE_RELEASING;
                     cooldownUntil = now + COOLDOWN_MS;
+                    releaseWaitUntil = now + MAX_RELEASE_WAIT_MS;
                 }
                 // kalau belum yakin & masih ada jatah percobaan, lanjut ke buffer berikutnya
+            } else { // STATE_RELEASING
+                // Baru boleh siap deteksi onset baru lagi kalau: jeda minimum sudah
+                // lewat DAN (dengungannya sudah mereda di bawah RELEASE_RMS ATAU
+                // sudah kelamaan nunggu / MAX_RELEASE_WAIT_MS lewat, sebagai jaring
+                // pengaman supaya tidak macet permanen kalau nadanya memang lama
+                // sekali berbunyi, mis. senar terbuka dibiarkan berdengung).
+                if (now > cooldownUntil && (rms < RELEASE_RMS || now > releaseWaitUntil)) {
+                    state = STATE_IDLE;
+                }
             }
 
             smoothedRms = smoothedRms * 0.85 + rms * 0.15;
@@ -191,6 +228,48 @@ public class NativeMicPitchDetector {
 
     private static int freqToIdx(double freq) {
         return (int) Math.round(freqToMidi(freq)) - BASE_MIDI;
+    }
+
+    // ---- Perbaikan "ketuker kategori" (angka<->huruf, angka<->tanda baca, dst) ----
+    // Nada disusun kromatis berurutan (per setengah nada) dari terendah ke tertinggi:
+    // baris angka (idx 0-9), lalu huruf/simbol (idx 10-19,20-28,30-36), tombol
+    // fungsi (shift/backspace/toggle/enter), lalu tanda baca (idx 40-42). Karena
+    // urutannya kontinu, batas antar kategori (mis. idx 9 ke idx 10) cuma
+    // terpisah SATU setengah-nada -- kalau deteksi pitch meleset dikit persis di
+    // batas itu, niat angka bisa kebaca sebagai huruf/tanda baca atau sebaliknya.
+    // HARUS sinkron persis dengan categoryOfIndex()/isCategorySafe() di index.html.
+    private static String categoryOfIndex(int idx) {
+        if (idx >= 0 && idx <= 9) return "digit";
+        if (idx == 29 || idx == 37 || idx == 38 || idx == 39 || idx == 43) return "functional";
+        if (idx >= 40 && idx <= 42) return "punct";
+        return "letterOrSymbol";
+    }
+
+    /**
+     * Cek apakah sebuah bacaan frekuensi cukup AMAN buat langsung dikomit tanpa
+     * risiko ketuker ke nada tetangga -- baik ketuker KATEGORI (angka jadi
+     * huruf/tanda baca) MAUPUN ketuker nada tetangga SESAMA kategori (mis. G2
+     * kebaca F#2, jadinya angka "3" padahal maunya "4"). Kalau bacaannya jelas
+     * dekat pusat nada, aman langsung. Kalau posisinya di area pinggir/ambigu
+     * antara dua nada tetangga, baru dikomit kalau bacaannya cukup meyakinkan --
+     * makin dekat batas kategori berbeda, makin tinggi juga syarat keyakinannya.
+     * HARUS sinkron persis dengan isCategorySafe() di index.html.
+     * idxOut[0] diisi index hasil pembulatan (dipakai lagi di commit() kalau aman).
+     */
+    private static boolean isCategorySafe(double freq, double probability, int[] idxOut) {
+        double midiOffset = freqToMidi(freq) - BASE_MIDI;
+        int idx = (int) Math.round(midiOffset);
+        idxOut[0] = idx;
+        if (idx < 0 || idx >= NOTE_COUNT) return false;
+        double centsOff = Math.abs(midiOffset - idx) * 100;
+        if (centsOff < 25) return true;
+        int neighborIdx = idx + (midiOffset >= idx ? 1 : -1);
+        boolean differentCategory = !(neighborIdx >= 0 && neighborIdx < NOTE_COUNT
+                && categoryOfIndex(idx).equals(categoryOfIndex(neighborIdx)));
+        // Beda kategori (mis. angka/huruf) butuh keyakinan lebih tinggi lagi
+        // daripada sekadar ketuker sesama angka, karena akibatnya lebih mengganggu.
+        double requiredProbability = differentCategory ? 0.9 : 0.75;
+        return probability >= requiredProbability;
     }
 
     private void commit(int idx, double freq) {
@@ -276,7 +355,10 @@ public class NativeMicPitchDetector {
         int bestTau = tauEstimate;
         int octaveCandidate = tauEstimate * 2;
         if (octaveCandidate <= maxTau) {
-            int margin = Math.max(2, (int) Math.round(tauEstimate * 0.12));
+            // Margin dilebarkan dari 12% ke 15% -- pada beberapa petikan gitar
+            // (senar lebih tua/pickup tertentu), dip subharmonik-nya meleset lebih
+            // dari 12% dari 2x tau, jadi window pencarian lama bisa kelewatan.
+            int margin = Math.max(2, (int) Math.round(tauEstimate * 0.15));
             int searchLo = Math.max(minTau, octaveCandidate - margin);
             int searchHi = Math.min(maxTau, octaveCandidate + margin);
             int localMinTau = -1;
@@ -284,7 +366,11 @@ public class NativeMicPitchDetector {
             for (int t = searchLo; t <= searchHi; t++) {
                 if (cmnd[t] < localMinVal) { localMinVal = cmnd[t]; localMinTau = t; }
             }
-            if (localMinTau != -1 && localMinVal < YIN_THRESHOLD && localMinVal <= cmnd[tauEstimate] * 1.05) {
+            // Toleransi dinaikkan dari 1.05 ke 1.3 -- laporan lapangan menunjukkan
+            // F2 masih sering kekunci ke F3 (harmonik ke-2-nya sering JAUH lebih
+            // kuat), jadi 1.05 terlalu ketat; 1.3 cukup longgar buat menangkap itu
+            // tanpa mulai salah pilih pas memang betul-betul beda nada.
+            if (localMinTau != -1 && localMinVal < YIN_THRESHOLD && localMinVal <= cmnd[tauEstimate] * 1.3) {
                 bestTau = localMinTau;
             }
         }
