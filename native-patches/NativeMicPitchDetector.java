@@ -344,21 +344,26 @@ public class NativeMicPitchDetector {
         }
         if (tauEstimate == -1) return null;
 
-        // Langkah 3b: koreksi oktaf (HARUS sinkron dengan yinDetect() di index.html).
-        // Loop di atas mulai dari tau TERKECIL (frekuensi tertinggi) supaya cepat
-        // berhenti di dip pertama yang meyakinkan -- tapi ini sumber utama salah
-        // tangkap F2/F3: kalau harmonik ke-2 gitar cukup kuat, dip CMNDF di situ
-        // (separuh periode / 2x frekuensi) sering ketemu lebih dulu daripada dip
-        // di periode fundamental sebenarnya, jadi nada kekunci satu oktaf ketinggian.
-        // Perbaikan: cek kandidat subharmonik di sekitar 2x tauEstimate (satu oktaf
-        // di bawah); kalau dip-nya sama meyakinkan, situ fundamental sebenarnya.
+        // Langkah 3b: koreksi oktaf. Loop di atas mulai dari tau TERKECIL (frekuensi
+        // tertinggi) supaya cepat berhenti di dip pertama yang meyakinkan -- tapi ini
+        // bisa jadi sumber salah tangkap F2/F3 kalau harmonik ke-2 gitar cukup kuat.
+        //
+        // PENTING -- kenapa versi sebelumnya ("kalau dip di oktaf-bawah tidak jauh
+        // lebih buruk, pilih itu") malah bikin SEMUA nada ikut salah turun jadi
+        // angka: sinyal apa pun yang periodik dengan periode T, secara matematis,
+        // OTOMATIS ikut periodik juga di 2T (berulang tiap T detik = otomatis
+        // berulang juga tiap 2T detik). Jadi dip CMNDF di 2x tau itu HAMPIR SELALU
+        // "tidak jauh lebih buruk" dari dip di tau aslinya -- untuk nada APAPUN,
+        // bukan cuma yang benar-benar salah oktaf. Itu kenapa makin dilonggarkan,
+        // makin banyak nada yang BENAR ikut terjungkal ke oktaf bawah.
+        //
+        // Perbaikan yang benar: baru pindah ke kandidat oktaf-bawah kalau dip di
+        // sana benar-benar LEBIH BERSIH (CMNDF-nya jelas lebih rendah), bukan cuma
+        // "tidak jauh lebih buruk". HARUS sinkron dengan yinDetect() di index.html.
         int bestTau = tauEstimate;
         int octaveCandidate = tauEstimate * 2;
         if (octaveCandidate <= maxTau) {
-            // Margin dilebarkan dari 12% ke 15% -- pada beberapa petikan gitar
-            // (senar lebih tua/pickup tertentu), dip subharmonik-nya meleset lebih
-            // dari 12% dari 2x tau, jadi window pencarian lama bisa kelewatan.
-            int margin = Math.max(2, (int) Math.round(tauEstimate * 0.15));
+            int margin = Math.max(2, (int) Math.round(tauEstimate * 0.12));
             int searchLo = Math.max(minTau, octaveCandidate - margin);
             int searchHi = Math.min(maxTau, octaveCandidate + margin);
             int localMinTau = -1;
@@ -366,19 +371,10 @@ public class NativeMicPitchDetector {
             for (int t = searchLo; t <= searchHi; t++) {
                 if (cmnd[t] < localMinVal) { localMinVal = cmnd[t]; localMinTau = t; }
             }
-            // Ambang toleransi TIDAK lagi satu angka tetap -- nada RENDAH (tau
-            // besar, dekat senar terbuka di baris angka) memang jauh lebih rawan
-            // harmonik ke-2 kuat, jadi pantas dapat toleransi longgar (1.3x). Tapi
-            // nada TINGGI (tau kecil, baris huruf q-p/a-l) sebelumnya ikut kena
-            // toleransi longgar yang sama, akibatnya nada tinggi yang sebenarnya
-            // SUDAH BENAR malah sering dipaksa turun satu oktaf secara keliru
-            // ("ngawur"). Sekarang toleransinya diinterpolasi menurut posisi tau
-            // di rentang pencarian: makin ke tau besar (nada makin rendah) makin
-            // longgar (sampai 1.3x), makin ke tau kecil (nada makin tinggi) makin
-            // ketat (balik ke 1.05x). HARUS sinkron dengan yinDetect() di index.html.
-            double lowFreqBias = Math.max(0, Math.min(1, (double)(tauEstimate - minTau) / (maxTau - minTau)));
-            double octaveTolerance = 1.05 + lowFreqBias * (1.3 - 1.05);
-            if (localMinTau != -1 && localMinVal < YIN_THRESHOLD && localMinVal <= cmnd[tauEstimate] * octaveTolerance) {
+            // Wajib LEBIH BERSIH (minimal 15% lebih rendah CMNDF-nya), bukan cuma
+            // "tidak jauh lebih buruk" -- lihat penjelasan di atas kenapa arah
+            // perbandingannya harus dibalik begini.
+            if (localMinTau != -1 && localMinVal < YIN_THRESHOLD && localMinVal <= cmnd[tauEstimate] * 0.85) {
                 bestTau = localMinTau;
             }
         }
