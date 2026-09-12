@@ -1386,17 +1386,20 @@
     }
     if(tauEstimate === -1) return null; // gak ada periode yang cukup jelas -> bukan nada tunggal yang bersih
 
-    // Langkah 3b: koreksi oktaf -- DIHAPUS SEMENTARA.
+    // Langkah 3b: koreksi oktaf -- DIHAPUS SEMENTARA (lihat Langkah 5 di bawah
+    // untuk pendekatan penggantinya).
     // Tiga percobaan berturut-turut memperbaiki heuristik "cek subharmonik di
     // 2x tau" ini (mulai dari toleransi tetap, lalu toleransi mengikuti posisi
     // nada, lalu syarat "wajib lebih bersih") semuanya berakhir menimbulkan
     // masalah baru yang lebih parah daripada masalah asalnya (F2 kadang
-    // kebaca F3). Daripada terus menebak tanpa alat uji nyata di gitar
-    // sungguhan, langkah paling aman adalah menghapus dulu heuristik ini
-    // sepenuhnya dan balik ke pembacaan YIN polos (tauEstimate dari Langkah 3
-    // dipakai apa adanya, tanpa penyesuaian oktaf). Ini supaya kita bisa tahu
-    // pasti: apakah kekacauan nada yang dilaporkan itu memang berasal dari
-    // sini, atau dari bagian lain. HARUS sinkron dengan yinDetect() di
+    // kebaca F3). Root cause-nya baru ketemu: membandingkan nilai CMNDF antar
+    // kandidat oktaf itu SENDIRI tidak bisa diandalkan untuk nada gitar asli --
+    // gelombang petikan gitar sering tidak simetris sempurna per periode,
+    // jadi CMNDF di frekuensi fundamental yang BENAR bisa saja terlihat lebih
+    // "kotor" (lebih tinggi) dibanding di salah satu oktafnya, padahal
+    // fundamental itu yang benar. Makanya pendekatan ini diganti total di
+    // Langkah 5 dengan verifikasi energi spektral langsung, bukan cuma
+    // re-membandingkan CMNDF. HARUS sinkron dengan yinDetect() di
     // NativeMicPitchDetector.java.
 
     // Langkah 4: interpolasi parabola di sekitar tauEstimate biar hasil frekuensinya presisi
@@ -1411,9 +1414,66 @@
     }
     if(betterTau<=0) return null;
 
+    const rawFreq = sampleRate / betterTau;
     const probability = 1 - cmnd[tauEstimate]; // makin dekat 1 = makin yakin/periodik
-    return { freq: sampleRate/betterTau, clarity: probability };
+
+    // Langkah 5: verifikasi oktaf lewat ENERGI SPEKTRAL LANGSUNG (algoritma
+    // Goertzel -- cara ringan mengukur energi di satu frekuensi spesifik tanpa
+    // perlu FFT penuh), menggantikan perbandingan CMNDF yang terbukti tidak
+    // bisa diandalkan (lihat catatan Langkah 3b). Idenya: cek betulan apakah
+    // ADA energi nyata di frekuensi hasil YIN itu sendiri, dibanding di
+    // setengah/dua kali frekuensinya -- bukan cuma re-tebak dari bentuk CMNDF.
+    //   - Kalau energi di SETENGAH frekuensi (satu oktaf di bawah) sudah
+    //     sebanding dengan energi di frekuensi hasil YIN, itu tanda kuat
+    //     "fundamental hilang/lemah" -- hasil YIN cuma harmonik ke-2 dari
+    //     fundamental yang sebenarnya satu oktaf di bawah (kasus F2/F3).
+    //   - Sebaliknya, kalau energi LANGSUNG di frekuensi hasil YIN itu sendiri
+    //     sangat lemah dibanding di DUA KALI frekuensinya, hasil YIN kemungkinan
+    //     cuma subharmonik semu (dampak trivial "periodik juga di 2x periode"),
+    //     dan fundamental aslinya ada satu oktaf di ATAS (kasus G#3/A2).
+    let finalFreq = rawFreq;
+    const magAtFreq = goertzelMag(buf, rawFreq, sampleRate);
+    const halfFreq = rawFreq/2;
+    if(halfFreq >= MIN_VALID_FREQ){
+      const magAtHalf = goertzelMag(buf, halfFreq, sampleRate);
+      if(magAtHalf >= magAtFreq*0.6){
+        finalFreq = halfFreq;
+      }
+    }
+    if(finalFreq === rawFreq){
+      const doubleFreq = rawFreq*2;
+      if(doubleFreq <= MAX_VALID_FREQ){
+        const magAtDouble = goertzelMag(buf, doubleFreq, sampleRate);
+        if(magAtFreq < magAtDouble*0.3){
+          finalFreq = doubleFreq;
+        }
+      }
+    }
+
+    return { freq: finalFreq, clarity: probability };
   }
+
+  /**
+   * Algoritma Goertzel: hitung magnitudo energi sinyal di SATU frekuensi
+   * target tertentu, tanpa perlu hitung FFT penuh atas semua frekuensi.
+   * Dipakai di Langkah 5 yinDetect() buat verifikasi oktaf lewat energi
+   * spektral langsung. HARUS sinkron dengan versi di NativeMicPitchDetector.java.
+   */
+  function goertzelMag(buf, targetFreq, sampleRate){
+    const N = buf.length;
+    const k = Math.round(N*targetFreq/sampleRate);
+    const w = 2*Math.PI*k/N;
+    const cosine = Math.cos(w), sine = Math.sin(w), coeff = 2*cosine;
+    let q0=0, q1=0, q2=0;
+    for(let n=0;n<N;n++){
+      q0 = coeff*q1 - q2 + buf[n];
+      q2=q1; q1=q0;
+    }
+    const real = q1 - q2*cosine;
+    const imag = q2*sine;
+    return Math.sqrt(real*real + imag*imag) / N;
+  }
+
 
   // ---- Perbaikan "ketuker kategori" (angka<->huruf, angka<->tanda baca, dst) ----
   // Nada disusun kromatis berurutan (per setengah nada) dari terendah ke tertinggi:
