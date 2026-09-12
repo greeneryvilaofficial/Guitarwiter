@@ -366,11 +366,19 @@ public class NativeMicPitchDetector {
             for (int t = searchLo; t <= searchHi; t++) {
                 if (cmnd[t] < localMinVal) { localMinVal = cmnd[t]; localMinTau = t; }
             }
-            // Toleransi dinaikkan dari 1.05 ke 1.3 -- laporan lapangan menunjukkan
-            // F2 masih sering kekunci ke F3 (harmonik ke-2-nya sering JAUH lebih
-            // kuat), jadi 1.05 terlalu ketat; 1.3 cukup longgar buat menangkap itu
-            // tanpa mulai salah pilih pas memang betul-betul beda nada.
-            if (localMinTau != -1 && localMinVal < YIN_THRESHOLD && localMinVal <= cmnd[tauEstimate] * 1.3) {
+            // Ambang toleransi TIDAK lagi satu angka tetap -- nada RENDAH (tau
+            // besar, dekat senar terbuka di baris angka) memang jauh lebih rawan
+            // harmonik ke-2 kuat, jadi pantas dapat toleransi longgar (1.3x). Tapi
+            // nada TINGGI (tau kecil, baris huruf q-p/a-l) sebelumnya ikut kena
+            // toleransi longgar yang sama, akibatnya nada tinggi yang sebenarnya
+            // SUDAH BENAR malah sering dipaksa turun satu oktaf secara keliru
+            // ("ngawur"). Sekarang toleransinya diinterpolasi menurut posisi tau
+            // di rentang pencarian: makin ke tau besar (nada makin rendah) makin
+            // longgar (sampai 1.3x), makin ke tau kecil (nada makin tinggi) makin
+            // ketat (balik ke 1.05x). HARUS sinkron dengan yinDetect() di index.html.
+            double lowFreqBias = Math.max(0, Math.min(1, (double)(tauEstimate - minTau) / (maxTau - minTau)));
+            double octaveTolerance = 1.05 + lowFreqBias * (1.3 - 1.05);
+            if (localMinTau != -1 && localMinVal < YIN_THRESHOLD && localMinVal <= cmnd[tauEstimate] * octaveTolerance) {
                 bestTau = localMinTau;
             }
         }
