@@ -344,14 +344,14 @@ public class NativeMicPitchDetector {
         }
         if (tauEstimate == -1) return null;
 
-        // Langkah 3b: koreksi oktaf -- DIHAPUS SEMENTARA.
-        // Tiga percobaan berturut-turut memperbaiki heuristik "cek subharmonik di
-        // 2x tau" ini semuanya berakhir menimbulkan masalah baru yang lebih parah
-        // daripada masalah asalnya (F2 kadang kebaca F3). Langkah paling aman
-        // adalah menghapus dulu heuristik ini sepenuhnya dan balik ke pembacaan
-        // YIN polos (tauEstimate dari Langkah 3 dipakai apa adanya). HARUS
-        // sinkron dengan yinDetect() di index.html.
-
+        // Langkah 3b: koreksi oktaf -- DIHAPUS TOTAL (lihat Langkah 5 di bawah
+        // untuk pendekatan penggantinya). Tiga percobaan berturut-turut memperbaiki
+        // heuristik "cek subharmonik di 2x tau" (bandingkan nilai CMNDF antar
+        // kandidat oktaf) semuanya gagal -- gelombang petikan gitar asli sering
+        // tidak simetris sempurna per periode, jadi CMNDF di frekuensi fundamental
+        // yang BENAR bisa saja terlihat lebih "kotor" dibanding di salah satu
+        // oktafnya, padahal fundamental itu yang benar. Diganti total di Langkah 5
+        // dengan verifikasi energi spektral LANGSUNG, bukan re-membandingkan CMNDF.
 
         // Langkah 4: interpolasi parabola di sekitar tauEstimate biar presisi.
         int x0 = tauEstimate > minTau ? tauEstimate - 1 : tauEstimate;
@@ -364,8 +364,64 @@ public class NativeMicPitchDetector {
         }
         if (betterTau <= 0) return null;
 
+        double rawFreq = sampleRate / betterTau;
         double probability = 1 - cmnd[tauEstimate];
-        return new PitchReading(sampleRate / betterTau, probability);
+
+        // Langkah 5: verifikasi oktaf lewat ENERGI SPEKTRAL LANGSUNG (algoritma
+        // Goertzel -- cara ringan mengukur energi di satu frekuensi spesifik
+        // tanpa perlu FFT penuh). Idenya: cek betulan apakah ADA energi nyata di
+        // frekuensi hasil YIN itu sendiri, dibanding di setengah/dua kali
+        // frekuensinya -- bukan cuma re-tebak dari bentuk CMNDF.
+        //   - Kalau energi di SETENGAH frekuensi (satu oktaf di bawah) sudah
+        //     sebanding dengan energi di frekuensi hasil YIN, itu tanda kuat
+        //     "fundamental hilang/lemah" -- hasil YIN cuma harmonik ke-2 dari
+        //     fundamental yang sebenarnya satu oktaf di bawah (kasus F2/F3).
+        //   - Sebaliknya, kalau energi LANGSUNG di frekuensi hasil YIN itu
+        //     sendiri sangat lemah dibanding di DUA KALI frekuensinya, hasil YIN
+        //     kemungkinan cuma subharmonik semu (dampak trivial "periodik juga
+        //     di 2x periode"), dan fundamental aslinya ada satu oktaf di ATAS
+        //     (kasus G#3/A2). HARUS sinkron dengan yinDetect() di index.html.
+        double finalFreq = rawFreq;
+        double magAtFreq = goertzelMag(buf, size, rawFreq, sampleRate);
+        double halfFreq = rawFreq / 2;
+        if (halfFreq >= MIN_VALID_FREQ) {
+            double magAtHalf = goertzelMag(buf, size, halfFreq, sampleRate);
+            if (magAtHalf >= magAtFreq * 0.6) {
+                finalFreq = halfFreq;
+            }
+        }
+        if (finalFreq == rawFreq) {
+            double doubleFreq = rawFreq * 2;
+            if (doubleFreq <= MAX_VALID_FREQ) {
+                double magAtDouble = goertzelMag(buf, size, doubleFreq, sampleRate);
+                if (magAtFreq < magAtDouble * 0.3) {
+                    finalFreq = doubleFreq;
+                }
+            }
+        }
+
+        return new PitchReading(finalFreq, probability);
+    }
+
+    /**
+     * Algoritma Goertzel: hitung magnitudo energi sinyal di SATU frekuensi
+     * target tertentu, tanpa perlu hitung FFT penuh atas semua frekuensi.
+     * Dipakai di Langkah 5 yinDetect() buat verifikasi oktaf lewat energi
+     * spektral langsung. HARUS sinkron dengan versi goertzelMag() di index.html.
+     */
+    private static double goertzelMag(float[] buf, int size, double targetFreq, int sampleRate) {
+        int k = (int) Math.round(size * targetFreq / sampleRate);
+        double w = 2 * Math.PI * k / size;
+        double cosine = Math.cos(w), sine = Math.sin(w), coeff = 2 * cosine;
+        double q0 = 0, q1 = 0, q2 = 0;
+        for (int n = 0; n < size; n++) {
+            q0 = coeff * q1 - q2 + buf[n];
+            q2 = q1;
+            q1 = q0;
+        }
+        double real = q1 - q2 * cosine;
+        double imag = q2 * sine;
+        return Math.sqrt(real * real + imag * imag) / size;
     }
 
     private void postOnset() {
