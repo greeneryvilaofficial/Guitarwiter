@@ -149,6 +149,12 @@ public class NativeMicPitchDetector {
         long cooldownUntil = 0;
         long releaseWaitUntil = 0;
         int sampleTries = 0;
+        // Konsensus multi-bacaan (persis cara tuner "pro" bekerja): sebelum ini,
+        // begitu SATU bacaan lolos ambang confidence langsung dikunci -- itu bikin
+        // rawan ketuker kalau kebetulan satu bacaan itu meleset. Sekarang minta
+        // beberapa bacaan BERTURUT-TURUT yang SEPAKAT (idx sama) dulu baru dikunci.
+        int candidateIdx = -1, candidateCount = 0;
+        final int CONFIRM_COUNT = 2; // dua bacaan berturut yang sepakat sudah cukup -- tetap terasa instan
 
         while (running.get()) {
             int read = audioRecord.read(rawBuf, 0, BUFFER_SAMPLES);
@@ -167,6 +173,8 @@ public class NativeMicPitchDetector {
                 if (rms > 0.02 && rms > smoothedRms * 1.6 && now > cooldownUntil) {
                     state = STATE_SAMPLING;
                     sampleTries = 0;
+                    candidateIdx = -1;
+                    candidateCount = 0;
                     postOnset();
                     // Sengaja TIDAK menganalisis buffer ini juga -- buffer di titik onset
                     // masih berisi transien awal petikan, bacaan baru dimulai dari buffer
@@ -180,13 +188,29 @@ public class NativeMicPitchDetector {
                     int[] idxOut = new int[1];
                     boolean safe = isCategorySafe(r.freq, r.probability, idxOut);
                     if (safe) {
-                        // YIN jauh lebih tahan salah oktaf dibanding autokorelasi biasa, jadi
-                        // begitu dapat SATU bacaan yang meyakinkan langsung dikunci -- gak
-                        // perlu dipetik berkali-kali dulu baru kedeteksi.
-                        commit(idxOut[0], r.freq);
-                        state = STATE_RELEASING;
-                        cooldownUntil = now + COOLDOWN_MS;
-                        releaseWaitUntil = now + MAX_RELEASE_WAIT_MS;
+                        // Konsensus: cek apakah bacaan kali ini SEPAKAT sama kandidat
+                        // sebelumnya (idx sama). Kalau beda, kandidat direset ke bacaan
+                        // baru ini (mulai hitung dari 1 lagi) -- daripada asal kunci ke
+                        // bacaan pertama yang kebetulan lolos ambang tapi ternyata cuma
+                        // sekali muncul (fluktuasi sesaat).
+                        if (idxOut[0] == candidateIdx) {
+                            candidateCount++;
+                        } else {
+                            candidateIdx = idxOut[0];
+                            candidateCount = 1;
+                        }
+                        if (candidateCount >= CONFIRM_COUNT || sampleTries >= MAX_SAMPLE_TRIES) {
+                            // Sudah dapat CONFIRM_COUNT bacaan berturut yang sepakat
+                            // (paling umum), ATAU jatah percobaan sudah habis -- pakai
+                            // bacaan TERAKHIR yang lolos ini (lebih baik daripada nyerah
+                            // total).
+                            commit(idxOut[0], r.freq);
+                            state = STATE_RELEASING;
+                            cooldownUntil = now + COOLDOWN_MS;
+                            releaseWaitUntil = now + MAX_RELEASE_WAIT_MS;
+                        }
+                        // kalau belum cukup konsensus & masih ada jatah percobaan,
+                        // lanjut ke buffer berikutnya buat konfirmasi tanpa mengubah state
                     } else if (sampleTries < MAX_SAMPLE_TRIES) {
                         // Bacaannya persis di batas dua kategori tuts berbeda (mis. angka
                         // vs huruf/tanda baca) dan belum cukup yakin -- coba baca ulang
@@ -390,15 +414,16 @@ public class NativeMicPitchDetector {
                 finalFreq = halfFreq;
             }
         }
-        if (finalFreq == rawFreq) {
-            double doubleFreq = rawFreq * 2;
-            if (doubleFreq <= MAX_VALID_FREQ) {
-                double magAtDouble = goertzelMag(buf, size, doubleFreq, sampleRate);
-                if (magAtFreq < magAtDouble * 0.3) {
-                    finalFreq = doubleFreq;
-                }
-            }
-        }
+        // Arah "naik" (kalau energi di rawFreq lemah dibanding di 2x-nya, berarti
+        // aslinya satu oktaf lebih tinggi -- buat kasus G#3/A2) DIHAPUS lagi di
+        // sini. Senar BAWAH gitar (mis. E2) itu wajar punya harmonik ke-2 yang
+        // kuat (apalagi lewat mic HP yang respons rendahnya lemah), jadi ciri
+        // "energi di 2x jauh lebih kuat dari fundamentalnya" itu SERING muncul
+        // juga untuk nada rendah yang sebenarnya sudah benar -- bukan cuma buat
+        // kasus subharmonik semu. Akibatnya E2 yang tadinya benar malah ikut
+        // dikoreksi naik jadi E3. Arah "turun" (halfFreq di atas) TIDAK kena
+        // masalah yang sama dan sudah teruji aman untuk kasus F2/F3. HARUS
+        // sinkron dengan yinDetect() di index.html.
 
         return new PitchReading(finalFreq, probability);
     }
