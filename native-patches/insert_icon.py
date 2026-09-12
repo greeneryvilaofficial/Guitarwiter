@@ -43,28 +43,23 @@ if not any_copied:
     print("FATAL: tidak ada satupun folder mipmap sumber yang ditemukan -- cek path app-icon di repo.")
     sys.exit(1)
 
-# ---- Sisipkan warna latar adaptive icon ke colors.xml (dibuat kalau belum ada) ----
-colors_path = os.path.join(res_dir, "values", "colors.xml")
-COLOR_LINE = '    <color name="ic_launcher_background">#111111</color>\n'
+# ---- Set warna latar adaptive icon ----
+# PENTING: template default Capacitor (hasil `cap add android`) SUDAH otomatis
+# menyediakan file values/ic_launcher_background.xml berisi <color name="ic_launcher_background">.
+# Kalau kita tambah warna dengan NAMA SAMA ke colors.xml (file berbeda), Android
+# menganggapnya resource duplikat walau beda file -- build gagal ("Duplicate resources").
+# Makanya di sini kita TIMPA LANGSUNG file ic_launcher_background.xml yang sudah
+# ada itu, bukan menambah entri baru di colors.xml.
+bg_color_path = os.path.join(res_dir, "values", "ic_launcher_background.xml")
+os.makedirs(os.path.dirname(bg_color_path), exist_ok=True)
 
-os.makedirs(os.path.dirname(colors_path), exist_ok=True)
-
-if os.path.exists(colors_path):
-    with open(colors_path, "r", encoding="utf-8") as f:
-        content = f.read()
-    if "ic_launcher_background" in content:
-        print("Warna ic_launcher_background sudah ada di colors.xml, lewati.")
-    elif "</resources>" in content:
-        content = content.replace("</resources>", COLOR_LINE + "</resources>")
-        with open(colors_path, "w", encoding="utf-8") as f:
-            f.write(content)
-        print("Warna ic_launcher_background ditambahkan ke colors.xml yang sudah ada.")
-    else:
-        print("FATAL: colors.xml ada tapi tidak menemukan tag </resources>, tidak diubah.")
-        sys.exit(1)
-else:
-    with open(colors_path, "w", encoding="utf-8") as f:
-        f.write('<?xml version="1.0" encoding="utf-8"?>\n<resources>\n' + COLOR_LINE + "</resources>\n")
-    print("colors.xml baru dibuat, berisi ic_launcher_background.")
+with open(bg_color_path, "w", encoding="utf-8") as f:
+    f.write(
+        '<?xml version="1.0" encoding="utf-8"?>\n'
+        "<resources>\n"
+        '    <color name="ic_launcher_background">#111111</color>\n'
+        "</resources>\n"
+    )
+print("Warna ic_launcher_background ditimpa di values/ic_launcher_background.xml (bukan colors.xml).")
 
 print("Selesai: ikon launcher foto pribadi terpasang.")
