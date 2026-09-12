@@ -1388,41 +1388,40 @@
 
     // Langkah 3b: koreksi oktaf. Loop di atas sengaja mulai dari tau TERKECIL
     // (frekuensi tertinggi) supaya cepat berhenti di dip pertama yang meyakinkan --
-    // tapi ini justru sumber utama salah tangkap F2/F3: kalau harmonik ke-2 gitar
-    // (2x frekuensi asli / separuh periode) cukup kuat, dip CMNDF-nya SERING lebih
-    // dulu ketemu (tau lebih kecil) daripada dip di periode fundamental yang
-    // sebenarnya, jadi nada kekunci satu oktaf ketinggian.
-    // Perbaikannya: cek juga kandidat "subharmonik" tepat di sekitar 2x tauEstimate
-    // (yaitu separuh frekuensi, satu oktaf di bawah). Kalau dip di sana SAMA
-    // meyakinkannya (CMNDF-nya tidak jauh lebih buruk), fundamental yang sebenarnya
-    // hampir selalu di sana, bukan di tau yang lebih pendek -- jadi lebih baik pilih
-    // yang lebih rendah (lebih "hemat", prinsip umum di semua pitch tracker).
+    // tapi ini bisa jadi sumber salah tangkap F2/F3 kalau harmonik ke-2 gitar
+    // cukup kuat.
+    //
+    // PENTING -- kenapa versi sebelumnya ("kalau dip di oktaf-bawah tidak jauh
+    // lebih buruk, pilih itu") malah bikin SEMUA nada ikut salah turun jadi
+    // angka: sinyal apa pun yang periodik dengan periode T, secara matematis,
+    // OTOMATIS ikut periodik juga di 2T (berulang tiap T detik = otomatis
+    // berulang juga tiap 2T detik). Jadi dip CMNDF di 2x tau itu HAMPIR SELALU
+    // "tidak jauh lebih buruk" dari dip di tau aslinya -- untuk nada APAPUN,
+    // bukan cuma yang benar-benar salah oktaf. Itu kenapa makin dilonggarkan,
+    // makin banyak nada yang BENAR ikut terjungkal ke oktaf bawah.
+    //
+    // Perbaikan yang benar: baru pindah ke kandidat oktaf-bawah kalau dip di
+    // sana benar-benar LEBIH BERSIH (CMNDF-nya jelas lebih rendah), bukan cuma
+    // "tidak jauh lebih buruk". Nada asli yang sebenarnya (fundamental sejati)
+    // biasanya menghasilkan pembacaan yang jelas lebih bersih dibanding dip
+    // yang cuma imbas alami dari periodisitas ganda -- syarat ini menyaring
+    // dua kasus itu tanpa perlu tahu dulu ini nada rendah atau tinggi.
+    // HARUS sinkron dengan yinDetect() di NativeMicPitchDetector.java.
     let bestTau = tauEstimate;
     const octaveCandidate = tauEstimate * 2;
     if(octaveCandidate <= maxTau){
       // cari dip lokal di sekitar octaveCandidate (bukan cuma titik persisnya --
-      // periode sebenarnya biasanya meleset dikit dari 2x bulat). Margin dilebarkan
-      // dari 12% ke 15% -- pada beberapa petikan gitar (senar lebih tua/pickup
-      // tertentu), dip subharmonik-nya meleset lebih dari 12% dari 2x tau, jadi
-      // window pencarian lama bisa kelewatan dan gagal ketemu.
-      let searchLo = Math.max(minTau, octaveCandidate - Math.max(2, Math.round(tauEstimate*0.15)));
-      let searchHi = Math.min(maxTau, octaveCandidate + Math.max(2, Math.round(tauEstimate*0.15)));
+      // periode sebenarnya biasanya meleset dikit dari 2x bulat)
+      let searchLo = Math.max(minTau, octaveCandidate - Math.max(2, Math.round(tauEstimate*0.12)));
+      let searchHi = Math.min(maxTau, octaveCandidate + Math.max(2, Math.round(tauEstimate*0.12)));
       let localMinTau = -1, localMinVal = Infinity;
       for(let t=searchLo; t<=searchHi; t++){
         if(cmnd[t] < localMinVal){ localMinVal = cmnd[t]; localMinTau = t; }
       }
-      // Ambang toleransi TIDAK lagi satu angka tetap -- nada RENDAH (tau besar,
-      // dekat senar terbuka di baris angka) memang jauh lebih rawan harmonik
-      // ke-2 kuat, jadi pantas dapat toleransi longgar (1.3x). Tapi nada TINGGI
-      // (tau kecil, baris huruf q-p/a-l) sebelumnya ikut kena toleransi longgar
-      // yang sama, akibatnya nada tinggi yang sebenarnya SUDAH BENAR malah
-      // sering dipaksa turun satu oktaf secara keliru ("ngawur"). Sekarang
-      // toleransinya diinterpolasi menurut posisi tau di rentang pencarian:
-      // makin ke tau besar (nada makin rendah) makin longgar (sampai 1.3x),
-      // makin ke tau kecil (nada makin tinggi) makin ketat (balik ke 1.05x).
-      const lowFreqBias = Math.max(0, Math.min(1, (tauEstimate - minTau) / (maxTau - minTau)));
-      const octaveTolerance = 1.05 + lowFreqBias * (1.3 - 1.05);
-      if(localMinTau !== -1 && localMinVal < THRESHOLD && localMinVal <= cmnd[tauEstimate] * octaveTolerance){
+      // Wajib LEBIH BERSIH (minimal 15% lebih rendah CMNDF-nya), bukan cuma
+      // "tidak jauh lebih buruk" -- lihat penjelasan di atas kenapa arah
+      // perbandingannya harus dibalik begini.
+      if(localMinTau !== -1 && localMinVal < THRESHOLD && localMinVal <= cmnd[tauEstimate] * 0.85){
         bestTau = localMinTau;
       }
     }
