@@ -344,41 +344,14 @@ public class NativeMicPitchDetector {
         }
         if (tauEstimate == -1) return null;
 
-        // Langkah 3b: koreksi oktaf. Loop di atas mulai dari tau TERKECIL (frekuensi
-        // tertinggi) supaya cepat berhenti di dip pertama yang meyakinkan -- tapi ini
-        // bisa jadi sumber salah tangkap F2/F3 kalau harmonik ke-2 gitar cukup kuat.
-        //
-        // PENTING -- kenapa versi sebelumnya ("kalau dip di oktaf-bawah tidak jauh
-        // lebih buruk, pilih itu") malah bikin SEMUA nada ikut salah turun jadi
-        // angka: sinyal apa pun yang periodik dengan periode T, secara matematis,
-        // OTOMATIS ikut periodik juga di 2T (berulang tiap T detik = otomatis
-        // berulang juga tiap 2T detik). Jadi dip CMNDF di 2x tau itu HAMPIR SELALU
-        // "tidak jauh lebih buruk" dari dip di tau aslinya -- untuk nada APAPUN,
-        // bukan cuma yang benar-benar salah oktaf. Itu kenapa makin dilonggarkan,
-        // makin banyak nada yang BENAR ikut terjungkal ke oktaf bawah.
-        //
-        // Perbaikan yang benar: baru pindah ke kandidat oktaf-bawah kalau dip di
-        // sana benar-benar LEBIH BERSIH (CMNDF-nya jelas lebih rendah), bukan cuma
-        // "tidak jauh lebih buruk". HARUS sinkron dengan yinDetect() di index.html.
-        int bestTau = tauEstimate;
-        int octaveCandidate = tauEstimate * 2;
-        if (octaveCandidate <= maxTau) {
-            int margin = Math.max(2, (int) Math.round(tauEstimate * 0.12));
-            int searchLo = Math.max(minTau, octaveCandidate - margin);
-            int searchHi = Math.min(maxTau, octaveCandidate + margin);
-            int localMinTau = -1;
-            double localMinVal = Double.POSITIVE_INFINITY;
-            for (int t = searchLo; t <= searchHi; t++) {
-                if (cmnd[t] < localMinVal) { localMinVal = cmnd[t]; localMinTau = t; }
-            }
-            // Wajib LEBIH BERSIH (minimal 15% lebih rendah CMNDF-nya), bukan cuma
-            // "tidak jauh lebih buruk" -- lihat penjelasan di atas kenapa arah
-            // perbandingannya harus dibalik begini.
-            if (localMinTau != -1 && localMinVal < YIN_THRESHOLD && localMinVal <= cmnd[tauEstimate] * 0.85) {
-                bestTau = localMinTau;
-            }
-        }
-        tauEstimate = bestTau;
+        // Langkah 3b: koreksi oktaf -- DIHAPUS SEMENTARA.
+        // Tiga percobaan berturut-turut memperbaiki heuristik "cek subharmonik di
+        // 2x tau" ini semuanya berakhir menimbulkan masalah baru yang lebih parah
+        // daripada masalah asalnya (F2 kadang kebaca F3). Langkah paling aman
+        // adalah menghapus dulu heuristik ini sepenuhnya dan balik ke pembacaan
+        // YIN polos (tauEstimate dari Langkah 3 dipakai apa adanya). HARUS
+        // sinkron dengan yinDetect() di index.html.
+
 
         // Langkah 4: interpolasi parabola di sekitar tauEstimate biar presisi.
         int x0 = tauEstimate > minTau ? tauEstimate - 1 : tauEstimate;
