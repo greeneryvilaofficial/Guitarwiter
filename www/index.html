@@ -1276,6 +1276,12 @@
   // 'releasing' (nunggu senar benar-benar mereda) -> balik ke 'idle'.
   let state='idle', sampleAt=0, cooldownUntil=0, smoothedRms=0.001;
   let sampleTries=0;
+  // Konsensus multi-bacaan (persis cara tuner "pro" bekerja): sebelum ini,
+  // begitu SATU bacaan lolos ambang confidence langsung dikunci -- itu bikin
+  // rawan ketuker kalau kebetulan satu bacaan itu meleset. Sekarang minta
+  // beberapa bacaan BERTURUT-TURUT yang SEPAKAT (idx sama) dulu baru dikunci.
+  let candidateIdx = -1, candidateCount = 0;
+  const CONFIRM_COUNT = 2; // dua bacaan berturut yang sepakat sudah cukup -- tetap terasa instan
   // Jeda waktu minimum SETELAH sebuah nada dikomit, sebelum boleh dianggap ada
   // petikan baru sama sekali -- HARUS sama persis dengan COOLDOWN_MS di
   // NativeMicPitchDetector.java.
@@ -1440,15 +1446,17 @@
         finalFreq = halfFreq;
       }
     }
-    if(finalFreq === rawFreq){
-      const doubleFreq = rawFreq*2;
-      if(doubleFreq <= MAX_VALID_FREQ){
-        const magAtDouble = goertzelMag(buf, doubleFreq, sampleRate);
-        if(magAtFreq < magAtDouble*0.3){
-          finalFreq = doubleFreq;
-        }
-      }
-    }
+    // Arah "naik" (kalau energi di rawFreq lemah dibanding di 2x-nya, berarti
+    // aslinya satu oktaf lebih tinggi -- buat kasus G#3/A2) DIHAPUS lagi di sini.
+    // Senar BAWAH gitar (mis. E2) itu wajar punya harmonik ke-2 yang kuat
+    // (apalagi lewat mic HP yang respons rendahnya lemah), jadi ciri "energi di
+    // 2x jauh lebih kuat dari fundamentalnya" itu SERING muncul juga untuk nada
+    // rendah yang sebenarnya sudah benar -- bukan cuma buat kasus subharmonik
+    // semu. Akibatnya E2 yang tadinya benar malah ikut dikoreksi naik jadi E3.
+    // Arah "turun" (halfFreq di atas) TIDAK kena masalah yang sama karena cuma
+    // aktif kalau setengah frekuensinya masih valid, dan sudah teruji aman
+    // untuk kasus F2/F3. HARUS sinkron dengan yinDetect() di
+    // NativeMicPitchDetector.java.
 
     return { freq: finalFreq, clarity: probability };
   }
@@ -1522,6 +1530,7 @@
       if(rms>0.02 && rms>smoothedRms*1.6 && now>cooldownUntil){
         state='sampling';
         sampleTries=0;
+        candidateIdx=-1; candidateCount=0;
         // Kasih jeda dikit dulu (~45ms) biar transien petikan gitar mereda dan
         // gelombangnya udah cukup stabil buat diukur.
         sampleAt = now + 45;
@@ -1534,14 +1543,30 @@
         if(result){
           const chk = isCategorySafe(result.freq, result.clarity);
           if(chk.safe){
-            // YIN jauh lebih tahan salah oktaf dibanding autokorelasi biasa, jadi
-            // begitu dapat SATU bacaan yang meyakinkan langsung dikunci -- gak perlu
-            // petik berkali-kali dulu baru kedeteksi. Ini yang bikin terasa instan
-            // persis seperti tuner gitar sungguhan.
-            commitDetectedNote(result.freq);
-            state='releasing';
-            cooldownUntil = now + COOLDOWN_MS;
-            releaseWaitUntil = now + MAX_RELEASE_WAIT_MS;
+            // Konsensus: cek apakah bacaan kali ini SEPAKAT sama kandidat
+            // sebelumnya (idx sama). Kalau beda, kandidat direset ke bacaan
+            // baru ini (mulai hitung dari 1 lagi) -- daripada asal kunci ke
+            // bacaan pertama yang kebetulan lolos ambang tapi ternyata cuma
+            // sekali muncul (fluktuasi sesaat).
+            if(chk.idx === candidateIdx){
+              candidateCount++;
+            } else {
+              candidateIdx = chk.idx;
+              candidateCount = 1;
+            }
+            if(candidateCount >= CONFIRM_COUNT || sampleTries >= 4){
+              // Sudah dapat CONFIRM_COUNT bacaan berturut yang sepakat (paling
+              // umum), ATAU jatah percobaan sudah habis -- pakai bacaan
+              // TERAKHIR yang lolos ini (lebih baik daripada nyerah total).
+              commitDetectedNote(result.freq);
+              state='releasing';
+              cooldownUntil = now + COOLDOWN_MS;
+              releaseWaitUntil = now + MAX_RELEASE_WAIT_MS;
+            } else {
+              // Baru 1 bacaan yang lolos -- tunggu satu bacaan lagi buat
+              // konfirmasi sebelum benar-benar dikunci.
+              sampleAt = now + 10;
+            }
           } else if(sampleTries < 4){
             // Bacaannya persis di batas dua kategori tuts berbeda (mis. angka vs
             // huruf/tanda baca) dan belum cukup yakin -- coba baca ulang dulu
